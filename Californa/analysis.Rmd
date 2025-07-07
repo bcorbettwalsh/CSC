@@ -1,0 +1,1526 @@
+---
+title: "analysis"
+author: "Jianan"
+date: "2023-09-15"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(readxl)
+library(tibble)
+library(purrr)
+library(plyr)
+```
+
+load the 100 simulations
+```{r}
+load("ventilator_carlifornia2.RData")
+load("date.RData")
+load("dataset.RData")
+```
+
+
+last_date of the crisis period
+```{r}
+table(last_date)
+```
+
+total number of patients after allocation for each day
+
+```{r}
+options(digits = 3)
+sum_v <- rep(0, length(v_all[[1]]))
+for(i in 1:length(v_all)){
+  sum_v <- sum_v + v_all[[i]]
+}
+n2 <- sum_v/length(v_all)
+np <- c(df3$number[1:90],n2)
+names(np) <- d 
+np
+```
+
+```{r}
+options(digits = 3)
+v_all_sd <- sapply(1:length(v_all[[1]]), function(j){sd(v_all %>% map_dbl(c(j)))})
+v_all_sd <- c(rep(0,90),v_all_sd)
+names(v_all_sd) <-d 
+v_all_sd
+```
+
+survival rate for the cohort
+
+```{r}
+tl <- length(unique(allo2[allo2$date >= "2020-03-31" & allo2$date <= "2020-04-14",]$pat_enc_csn_id))
+options(digits = 3)
+survival <- 0
+cohort_new[is.na(cohort_new$dead),]$dead <- 0
+for (i in 1:length(allo3_all)) {
+  df <- allo3_all[[i]][allo3_all[[i]]$date >= "2020-03-31" & allo3_all[[i]]$date <= "2020-04-14",]
+  id <- unique(df$pat_enc_csn_id)
+  survival <- table(cohort_new[cohort_new$pat_enc_csn_id %in% id,]$dead)[1]/tl + survival
+}
+survival/length(allo3_all)
+```
+
+(7) survival rate for group——give 
+
+```{r}
+a <- 0
+for (i in 1:length(group_give_all)) {
+  id <- group_give_all[[i]]$pat_enc_csn_id
+  a <- table(cohort_new[cohort_new$pat_enc_csn_id %in% id,]$dead)[1]/length(id) + a
+}
+format(a/length(group_give_all),digits = 5)
+```
+
+(8) survival rate for group--receive
+
+```{r}
+cohort_new[is.na(cohort_new$dead),]$dead <- 0
+b <- 0
+for (i in 1:length(group_receive_all)) {
+  id <- group_receive_all[[i]]$pat_enc_csn_id
+  b <- table(cohort_new[cohort_new$pat_enc_csn_id %in% id,]$dead)[1]/length(id) + b
+}
+format(b/length(group_receive_all),digits = 5)
+```
+
+### 2. Race
+
+```{r include = FALSE}
+#race regroup
+cohort_new <- add_column(cohort_new, race_new = NA)
+cohort_new[cohort_new$race %in% c("White","Unknown, White",
+                                  "Other Race, White","White, Other Race",
+                                  "White, Unknown",
+                                  "White, Other Pacific Islander",
+                                  "White;Other Race",
+                                  "White;Other Race",
+                                  "Patient Refused;White",
+                                  "Other Race;White"),]$race_new <- "White"
+cohort_new[cohort_new$race %in% c("African American (Black)",
+                                  "African American (Black), White",
+                                  "African American (Black), Bangladeshi",
+                                  "Chinese;African American (Black)",
+                                  "White;African American (Black)",
+                                  "Bangladeshi;African American (Black)"),]$race_new <- "African American"
+cohort_new[cohort_new$race %in% c("Asian","Chinese","Chinese, Asian - unspecified","Japanese",
+                                  "Pakistani","Bangladeshi","Asian - unspecified, Other Race",
+                                  "Korean, Unknown","Other Pacific Islander","Asian Indian",
+                                  "Asian - unspecified","Unknown, Chinese","Chinese, Other Race",
+                                  "Filipino","Filipino, Other Pacific Islander",
+                                  "Other Race, Chinese",
+                                  "Asian;Asian - unspecified",
+                                  "Korean","Other Race;Chinese",
+                                  "Chinese;Asian - unspecified",
+                                  "Vietnamese","Asian Indian;Other Race",
+                                  "Asian - unspecified;Chinese",
+                                  "Chinese;Asian"),]$race_new <- "Asian"
+cohort_new[cohort_new$race %in% c("Native American (American Indian/Eskimo/Aleutian)",
+                                  "Native American (American Indian/Eskimo/Aleutian) , Other Pacific Islander",
+                                  "White;Native American (American Indian/Eskimo/Aleutian)",
+                                  "Other Pacific Islander;Native American (American Indian/Eskimo/Aleutian)",
+                                  "Native American (American Indian/Eskimo/Aleutian) ;African American (Black)",
+                                  "Other Pacific Islander;White",
+                                  "Filipino;Other Pacific Islander",
+                                  "Native American (American Indian/Eskimo/Aleutian) ;African American (Black)"),]$race_new <- "Native American"
+cohort_new[cohort_new$race %in% c("Unknown","Other Race",NA,"Patient Refused",
+                                  "Unknown, Other Race","Other Race, Unknown","0"),]$race_new <- "Unknown"
+cohort_new[is.na(cohort_new$race_new),]
+#ethnicity regroup
+cohort_new <- add_column(cohort_new, ethnicity_new = NA)
+cohort_new[cohort_new$ethnicity %in% c("Not of Spanish/Hispanic Origin",
+                                       "Not of Spanish/Hispanic Origin, Unknown"),]$ethnicity_new <- "Not Hispanic"
+cohort_new[cohort_new$ethnicity %in% c("Patient Refused","Unknown",
+                                       "Unknown, Not of Spanish/Hispanic Origin",NA),]$ethnicity_new <- "Unknown"
+cohort_new[is.na(cohort_new$ethnicity_new),]$ethnicity_new <- "Hispanic"
+cohort_new[is.na(cohort_new$ethnicity_new),]
+cohort_new[is.na(cohort_new$race_new),]$race
+cohort_new[is.na(cohort_new$ethnicity_new),]$ethnicity
+```
+
+(1) cohort (674, from 3-31 to 4-14): the age, gender, race and ethnicity, whether they live in the real world 
+
+```{r}
+a <- table(cohort_new$pat_id) > 1
+more2 <- names(table(cohort_new$pat_id))[a]
+s_date <- as.Date("2020-03-31",format = ("%Y-%m-%d"))
+la_date <- as.Date("2020-04-14",format = ("%Y-%m-%d"))
+v_date <- seq(s_date,la_date,by = 1)
+group_all <- NULL
+for (k in v_date) {
+  c_df <- allo2 %>% filter(date == k)
+  group_all <- unique(c(group_all,unique(c_df$pat_id)))
+}
+#enroll for once
+group_all1 <- group_all[!group_all %in% more2] 
+#enroll for several times
+group_all2 <- group_all[group_all %in% more2] #15 patients
+```
+
+
+Age
+```{r}
+#age
+#enroll for once
+age_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$"age" 
+#enroll for several times
+#"Z8268782"
+age_all2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8268782",]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d1$"age"[1])
+#"Z4356816" 
+d2 <- cohort_new[cohort_new$pat_id == "Z4356816" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d2$"age"[2],d2$"age"[1])
+#"Z634268"
+d3 <- cohort_new[cohort_new$pat_id == "Z634268" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d3$"age"[1])
+#"Z1906509"
+d4 <- cohort_new[cohort_new$pat_id == "Z1906509" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d4$"age"[1])
+#"Z5874193"
+d5 <- cohort_new[cohort_new$pat_id == "Z5874193",]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d5$"age"[1])
+#"Z8138823"
+d6 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d6$"age"[1])
+#"Z6223347"
+d7 <- cohort_new[cohort_new$pat_id == "Z6223347",]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d7$"age"[2])
+#"Z639784"
+d8 <- cohort_new[cohort_new$pat_id == "Z639784",]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d8$"age"[2])
+#"Z2173404"
+d9 <- cohort_new[cohort_new$pat_id == "Z2173404",]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d9$"age"[2])
+#"Z8223957"
+d10 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d10$"age"[2])
+#Z3338372"
+d11 <- cohort_new[cohort_new$pat_id == "Z3338372" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d11$"age"[1])
+#"Z7002226"
+d12 <- cohort_new[cohort_new$pat_id == "Z7002226" ,]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d12$"age"[2])
+#"Z2417059"
+d13 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d13$"age"[2])
+#"Z8089628"
+d14 <- cohort_new[cohort_new$pat_id == "Z8089628" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d14$"age"[1])
+#Z2656846"
+d15 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d15$"age"[1])
+age_all <- c(age_all1,age_all2)
+format(x = mean(age_all, na.rm = T),digits = 6)
+format(sd(age_all, na.rm = T),digits = 6)
+```
+
+Gender
+```{r}
+#gender
+#enroll for once
+gender_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$sex
+#enroll for several times
+#"Z8268782"
+gender_all2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8268782",]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d1$"sex"[1])
+#"Z4356816" 
+d2 <- cohort_new[cohort_new$pat_id == "Z4356816" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d2$"sex"[2],d2$"sex"[1])
+#"Z634268"
+d3 <- cohort_new[cohort_new$pat_id == "Z634268" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d3$"sex"[1])
+#"Z1906509"
+d4 <- cohort_new[cohort_new$pat_id == "Z1906509" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d4$"sex"[1])
+#"Z5874193"
+d5 <- cohort_new[cohort_new$pat_id == "Z5874193",]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d5$"sex"[1])
+#"Z8138823"
+d6 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d6$"sex"[1])
+#"Z6223347"
+d7 <- cohort_new[cohort_new$pat_id == "Z6223347",]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d7$"sex"[2])
+#"Z639784"
+d8 <- cohort_new[cohort_new$pat_id == "Z639784",]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d8$"sex"[2])
+#"Z2173404"
+d9 <- cohort_new[cohort_new$pat_id == "Z2173404",]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d9$"sex"[2])
+#"Z8223957"
+d10 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d10$"sex"[2])
+#Z3338372"
+d11 <- cohort_new[cohort_new$pat_id == "Z3338372" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d11$"sex"[1])
+#"Z7002226"
+d12 <- cohort_new[cohort_new$pat_id == "Z7002226" ,]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d12$"sex"[2])
+#"Z2417059"
+d13 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d13$"sex"[2])
+#"Z8089628"
+d14 <- cohort_new[cohort_new$pat_id == "Z8089628" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d14$"sex"[1])
+#Z2656846"
+d15 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d15$"sex"[1])
+gender_all <- c(gender_all1,gender_all2)
+t1 <- table(gender_all)
+t1
+t1/length(gender_all)
+```
+
+Race
+```{r}
+#race
+#enroll for once
+race_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$race_new
+#enroll for several times
+race_all2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8268782",]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d1$"race_new"[1])
+#"Z4356816" 
+d2 <- cohort_new[cohort_new$pat_id == "Z4356816" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d2$"race_new"[2],d2$"race_new"[1])
+#"Z634268"
+d3 <- cohort_new[cohort_new$pat_id == "Z634268" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d3$"race_new"[1])
+#"Z1906509"
+d4 <- cohort_new[cohort_new$pat_id == "Z1906509" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d4$"race_new"[1])
+#"Z5874193"
+d5 <- cohort_new[cohort_new$pat_id == "Z5874193",]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d5$"race_new"[1])
+#"Z8138823"
+d6 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d6$"race_new"[1])
+#"Z6223347"
+d7 <- cohort_new[cohort_new$pat_id == "Z6223347",]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d7$"race_new"[2])
+#"Z639784"
+d8 <- cohort_new[cohort_new$pat_id == "Z639784",]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d8$"race_new"[2])
+#"Z2173404"
+d9 <- cohort_new[cohort_new$pat_id == "Z2173404",]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d9$"race_new"[2])
+#"Z8223957"
+d10 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d10$"race_new"[2])
+#Z3338372"
+d11 <- cohort_new[cohort_new$pat_id == "Z3338372" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d11$"race_new"[1])
+#"Z7002226"
+d12 <- cohort_new[cohort_new$pat_id == "Z7002226" ,]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d12$"race_new"[2])
+#"Z2417059"
+d13 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d13$"race_new"[2])
+#"Z8089628"
+d14 <- cohort_new[cohort_new$pat_id == "Z8089628" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d14$"race_new"[1])
+#Z2656846"
+d15 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d15$"race_new"[1])
+race_all <- c(race_all1,race_all2)
+t2 <- table(race_all)
+t2
+t2/length(race_all)
+```
+
+Ethnicity
+```{r}
+#Ethnicity
+#enroll for once
+eth_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$ethnicity_new
+#enroll for several times
+eth_all2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8268782",]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d1$"ethnicity_new"[1])
+#"Z4356816" 
+d2 <- cohort_new[cohort_new$pat_id == "Z4356816" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d2$"ethnicity_new"[2],d2$"ethnicity_new"[1])
+#"Z634268"
+d3 <- cohort_new[cohort_new$pat_id == "Z634268" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d3$"ethnicity_new"[1])
+#"Z1906509"
+d4 <- cohort_new[cohort_new$pat_id == "Z1906509" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d4$"ethnicity_new"[1])
+#"Z5874193"
+d5 <- cohort_new[cohort_new$pat_id == "Z5874193",]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d5$"ethnicity_new"[1])
+#"Z8138823"
+d6 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d6$"ethnicity_new"[1])
+#"Z6223347"
+d7 <- cohort_new[cohort_new$pat_id == "Z6223347",]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d7$"ethnicity_new"[2])
+#"Z639784"
+d8 <- cohort_new[cohort_new$pat_id == "Z639784",]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d8$"ethnicity_new"[2])
+#"Z2173404"
+d9 <- cohort_new[cohort_new$pat_id == "Z2173404",]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d9$"ethnicity_new"[2])
+#"Z8223957"
+d10 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d10$"ethnicity_new"[2])
+#Z3338372"
+d11 <- cohort_new[cohort_new$pat_id == "Z3338372" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d11$"ethnicity_new"[1])
+#"Z7002226"
+d12 <- cohort_new[cohort_new$pat_id == "Z7002226" ,]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d12$"ethnicity_new"[2])
+#"Z2417059"
+d13 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d13$"ethnicity_new"[2])
+#"Z8089628"
+d14 <- cohort_new[cohort_new$pat_id == "Z8089628" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d14$"ethnicity_new"[1])
+#Z2656846"
+d15 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d15$"ethnicity_new"[1])
+eth_all <- c(eth_all1,eth_all2)
+t3 <- table(eth_all)
+t3
+t3/length(eth_all)
+```
+
+whether they live in the real world 
+```{r}
+#outcome
+cohort_new[is.na(cohort_new$dead),]$dead <- 0
+cohort_new$dead <- as.character(cohort_new$dead)
+cohort_new[cohort_new$dead == "1",]$dead <- "deceased"
+cohort_new[cohort_new$dead == "0",]$dead <- "alive"
+outcome_all1 <- as.character(rep(0,length(group_all1)))
+for (i in seq_along(group_all1)) {
+  outcome_all1[i] <- cohort_new[cohort_new$pat_id == group_all1[i],]$"dead" 
+}
+outcome_all2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8268782",]
+#only the first admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d1$"dead"[1])
+#"Z4356816" 
+d2 <- cohort_new[cohort_new$pat_id == "Z4356816" ,]
+#only the second admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d2$"dead"[2],d2$"dead"[1])
+#"Z634268"
+d3 <- cohort_new[cohort_new$pat_id == "Z634268" ,]
+#only the second admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d3$"dead"[1])
+#"Z1906509"
+d4 <- cohort_new[cohort_new$pat_id == "Z1906509" ,]
+#only the second admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d4$"dead"[1])
+#"Z5874193"
+d5 <- cohort_new[cohort_new$pat_id == "Z5874193",]
+#only the first admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d5$"dead"[1])
+#"Z8138823"
+d6 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d6$"dead"[1])
+#"Z6223347"
+d7 <- cohort_new[cohort_new$pat_id == "Z6223347",]
+#only the first admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d7$"dead"[2])
+#"Z639784"
+d8 <- cohort_new[cohort_new$pat_id == "Z639784",]
+#only the first admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d8$"dead"[2])
+#"Z2173404"
+d9 <- cohort_new[cohort_new$pat_id == "Z2173404",]
+#only the first admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d9$"dead"[2])
+#"Z8223957"
+d10 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d10$"dead"[2])
+#Z3338372"
+d11 <- cohort_new[cohort_new$pat_id == "Z3338372" ,]
+#only the second admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d11$"dead"[1])
+#"Z7002226"
+d12 <- cohort_new[cohort_new$pat_id == "Z7002226" ,]
+#only the first admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d12$"dead"[2])
+#"Z2417059"
+d13 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the second admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d13$"dead"[2])
+#"Z8089628"
+d14 <- cohort_new[cohort_new$pat_id == "Z8089628" ,]
+#only the second admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d14$"dead"[1])
+#Z2656846"
+d15 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the first admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d15$"dead"[1])
+outcome_all <- c(outcome_all1, outcome_all2)
+t4 <- table(outcome_all)
+t4
+t4/length(outcome_all)
+```
+
+(2) group_give
+
+average and the sd of the number
+
+```{r}
+length1 = rep(0,length(group_give_all))
+for (i in seq_along(group_give_all)) {
+  length1[i] = nrow(group_give_all[[i]])
+}
+mean(length1)
+sd(length1)
+```
+
+
+for each simulation
+```{r}
+mean_groupa <- rep(0,length(group_give_all))
+sd_groupa <- rep(0,length(group_give_all))
+gender_percent_groupa <- 0
+gender_number_groupa <- 0
+race_percent_groupa <- NULL
+race_number_groupa <- NULL
+ethnicity_percent_groupa <- NULL
+ethnicity_number_groupa <- NULL
+outcome_percent_groupa <- NULL
+outcome_number_groupa <- NULL
+for (j in seq_along(group_give_all)) {
+  #cat("i = ", j, "\n")
+groupa <- group_give_all[[j]]$pat_enc_csn_id
+groupa_id <- group_give_all[[j]]$pat_id
+#AGE
+age_groupa <- rep(0,length(groupa))
+for (i in 1:length(groupa)) {
+age_groupa[i] <- max(cohort_new[cohort_new$pat_id %in% groupa_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"age")
+}
+mean_groupa[j] <- mean(age_groupa,na.rm = T)
+sd_groupa[j] <- sd(age_groupa,na.rm = T) 
+#GENDER
+gender_groupa <- rep(0,length(groupa))
+for (i in 1:length(groupa)) {
+ gender_groupa[i] <- unique(cohort_new[cohort_new$pat_id %in% groupa_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$sex)
+}
+t1 <- table(gender_groupa)
+gender_percent_groupa <- t1/length(groupa) + gender_percent_groupa
+gender_number_groupa <- t1 + gender_number_groupa
+#RACE
+race_groupa <- rep(0,length(groupa))
+for (i in 1:length(groupa)) {
+ race_groupa[i] <- unique(cohort_new[cohort_new$pat_id %in% groupa_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$race_new)
+}
+t2 <- table(race_groupa)
+race_percent_groupa[[j]] <- t2/length(groupa)
+race_number_groupa[[j]] <- t2
+#ETHNICITY
+eth_groupa <- rep(0,length(groupa))
+for (i in 1:length(groupa)) {
+ eth_groupa[i] <- unique(cohort_new[cohort_new$pat_id %in% groupa_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$ethnicity_new)
+}
+t3 <- table(eth_groupa)
+ethnicity_percent_groupa[[j]] <- t3/length(groupa)
+ethnicity_number_groupa[[j]] <- t3
+#OUTCOME
+middle <- NULL
+outcome_groupa <- as.character(rep(0,length(groupa_id)))
+for (i in seq_along(groupa)) {
+  middle[[i]] <- cohort_new[cohort_new$pat_id %in% groupa_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"dead"
+  if(sum(middle[[i]] %in% "deceased") > 0){
+    outcome_groupa[i] <- "deceased" 
+  } else {
+    outcome_groupa[i] <- "alive" 
+  }
+}
+t4 <- table(outcome_groupa)
+outcome_percent_groupa[[j]] <- t4/length(groupa_id)
+outcome_number_groupa[[j]] <- t4
+}
+
+```
+
+allocation score
+```{r}
+score_bl <- NULL
+for (i in seq_along(group_give_all)) {
+  score_bl[[i]] <- group_give_all[[i]]$`Cali-psN`
+}
+summary(sapply(score_bl, mean))
+#the sd
+sd(sapply(score_bl, mean))
+```
+
+the day - group a
+```{r}
+day_bl <- NULL
+for (i in seq_along(group_give_all)) {
+  day_bl[[i]] <- group_give_all[[i]]$intubated_day
+}
+summary(sapply(day_bl, mean))
+```
+
+age
+```{r}
+mean(mean_groupa) #mean
+mean(sd_groupa) #sd
+```
+
+gender
+```{r}
+gender_number_groupa/length(group_give_all)
+gender_percent_groupa/length(group_give_all)
+```
+
+race
+```{r}
+race_percent <- rep(0,5)
+race_number <- rep(0,5)
+names(race_percent) <- names(race_number) <- c("African American","Asian","Unknown","White","Native American")
+for (j in seq_along(race_percent_groupa)) {
+race_percent["African American"] <- race_percent["African American"] + race_percent_groupa[[j]]["African American"]
+race_percent["Asian"] <- race_percent["Asian"] + race_percent_groupa[[j]]["Asian"]
+race_percent["Unknown"] <- race_percent["Unknown"] + race_percent_groupa[[j]]["Unknown"]
+race_percent["White"] <- race_percent["White"] + race_percent_groupa[[j]]["White"]
+if(!is.na(race_percent_groupa[[j]]["Native American"])){
+race_percent["Native American"] <- race_percent["Native American"] + race_percent_groupa[[j]]["Native American"]
+}
+race_number["African American"] <- race_number["African American"] + race_number_groupa[[j]]["African American"]
+race_number["Asian"] <- race_number["Asian"] + race_number_groupa[[j]]["Asian"]
+race_number["Unknown"] <- race_number["Unknown"] + race_number_groupa[[j]]["Unknown"]
+race_number["White"] <- race_number["White"] + race_number_groupa[[j]]["White"]
+if(!is.na(race_number_groupa[[j]]["Native American"])){
+race_number["Native American"] <- race_number["Native American"] + race_number_groupa[[j]]["Native American"]
+}
+}
+race_number/length(group_give_all)
+race_percent/length(group_give_all)
+```
+
+ethnicity
+```{r}
+ethnicity_percent <- rep(0,3)
+ethnicity_number <- rep(0,3)
+names(ethnicity_percent) <- names(ethnicity_number) <- c("Hispanic","Not Hispanic","Unknown")
+for (j in seq_along(ethnicity_percent_groupa)) {
+ethnicity_percent["Hispanic"] <- ethnicity_percent["Hispanic"] + ethnicity_percent_groupa[[j]]["Hispanic"]
+ethnicity_percent["Not Hispanic"] <- ethnicity_percent["Not Hispanic"] + ethnicity_percent_groupa[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_percent_groupa[[j]]["Unknown"])){
+ethnicity_percent["Unknown"] <- ethnicity_percent["Unknown"] + ethnicity_percent_groupa[[j]]["Unknown"]
+}
+
+ethnicity_number["Hispanic"] <- ethnicity_number["Hispanic"] + ethnicity_number_groupa[[j]]["Hispanic"]
+ethnicity_number["Not Hispanic"] <- ethnicity_number["Not Hispanic"] + ethnicity_number_groupa[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_number_groupa[[j]]["Unknown"])){
+ethnicity_number["Unknown"] <- ethnicity_number["Unknown"] + ethnicity_number_groupa[[j]]["Unknown"]
+}
+}
+ethnicity_number/length(group_give_all)
+ethnicity_percent/length(group_give_all)
+```
+
+outcome
+```{r}
+outcome_percent <- rep(0,2)
+outcome_number <- rep(0,2)
+names(outcome_percent) <- names(outcome_number) <- c("alive","deceased")
+for (j in seq_along(ethnicity_percent_groupa)) {
+outcome_percent["alive"] <- outcome_percent["alive"] + outcome_percent_groupa[[j]]["alive"]
+outcome_percent["deceased"] <- outcome_percent["deceased"] + outcome_percent_groupa[[j]]["deceased"]
+
+outcome_number["alive"] <- outcome_number["alive"] + outcome_number_groupa[[j]]["alive"]
+outcome_number["deceased"] <- outcome_number["deceased"] + outcome_number_groupa[[j]]["deceased"]
+}
+outcome_percent/length(group_give_all)
+#sd of the percentage of the outcome
+sd1 = rep(0,length(ethnicity_percent_groupa))
+for (j in seq_along(ethnicity_percent_groupa)) {
+sd1[j] =  outcome_percent_groupa[[j]]["alive"]
+}
+sd(sd1)
+outcome_number/length(group_give_all)
+#sd of the number of the outcome
+sd2 = rep(0,length(ethnicity_percent_groupa))
+for (j in seq_along(ethnicity_percent_groupa)) {
+sd2[j] =  outcome_number_groupa[[j]]["alive"]
+}
+sd(sd2)
+```
+
+(3) group_receive
+
+average and the sd of the number
+
+```{r}
+length2 = rep(0,length(group_receive_all))
+for (i in seq_along(group_receive_all)) {
+  length2[i] = nrow(group_receive_all[[i]])
+}
+mean(length2)
+sd(length2)
+```
+
+
+for each simulation
+```{r}
+mean_groupb <- rep(0,length(group_receive_all))
+sd_groupb <- rep(0,length(group_receive_all))
+gender_percent_groupb <- 0
+gender_number_groupb <- 0
+race_percent_groupb <- NULL
+race_number_groupb <- NULL
+ethnicity_percent_groupb <- NULL
+ethnicity_number_groupb <- NULL
+outcome_percent_groupb <- NULL
+outcome_number_groupb <- NULL
+for (j in seq_along(group_receive_all)) {
+  #cat("i = ", j, "\n")
+groupb_15 <- group_receive_all[[j]]$pat_enc_csn_id
+groupb_15_id <- group_receive_all[[j]]$pat_id
+#AGE
+age_groupb <- rep(0,length(groupb_15))
+for (i in 1:length(groupb_15)) {
+age_groupb[i] <- max(cohort_new[cohort_new$pat_id %in% groupb_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"age")
+}
+mean_groupb[j] <- mean(age_groupb,na.rm = T)
+sd_groupb[j] <- sd(age_groupb,na.rm = T) 
+#GENDER
+gender_groupb <- rep(0,length(groupb_15))
+for (i in 1:length(groupb_15)) {
+ gender_groupb[i] <- unique(cohort_new[cohort_new$pat_id %in% groupb_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$sex)
+}
+t1 <- table(gender_groupb)
+gender_percent_groupb <- t1/length(groupb_15) + gender_percent_groupb
+gender_number_groupb <- t1 + gender_number_groupb
+#RACE
+race_groupb <- rep(0,length(groupb_15))
+for (i in 1:length(groupb_15)) {
+ race_groupb[i] <- unique(cohort_new[cohort_new$pat_id %in% groupb_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$race_new)
+}
+t2 <- table(race_groupb)
+race_percent_groupb[[j]] <- t2/length(groupb_15)
+race_number_groupb[[j]] <- t2
+#ETHNICITY
+eth_groupb <- rep(0,length(groupb_15))
+for (i in 1:length(groupb_15)) {
+ eth_groupb[i] <- unique(cohort_new[cohort_new$pat_id %in% groupb_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$ethnicity_new)
+}
+t3 <- table(eth_groupb)
+ethnicity_percent_groupb[[j]] <- t3/length(groupb_15)
+ethnicity_number_groupb[[j]] <- t3
+#OUTCOME
+middle <- NULL
+outcome_groupb <- as.character(rep(0,length(groupb_15_id)))
+for (i in seq_along(groupb_15)) {
+  middle[[i]] <- cohort_new[cohort_new$pat_id %in% groupb_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"dead"
+  if(sum(middle[[i]] %in% "deceased") > 0){
+    outcome_groupb[i] <- "deceased" 
+  } else {
+    outcome_groupb[i] <- "alive" 
+  }
+}
+t4 <- table(outcome_groupb)
+outcome_percent_groupb[[j]] <- t4/length(groupb_15_id)
+outcome_number_groupb[[j]] <- t4
+}
+```
+
+allocation score
+```{r}
+score_bl <- NULL
+for (i in seq_along(group_receive_all)) {
+  score_bl[[i]] <- group_receive_all[[i]]$`Cali-psN`
+}
+summary(sapply(score_bl, mean))
+#the sd
+sd(sapply(score_bl, mean))
+```
+
+
+
+age
+```{r}
+mean(mean_groupb) #mean
+mean(sd_groupb) #sd
+```
+gender
+```{r}
+gender_number_groupb/length(group_receive_all)
+gender_percent_groupb/length(group_receive_all)
+```
+
+race
+```{r}
+race_percent <- rep(0,5)
+race_number <- rep(0,5)
+names(race_percent) <- names(race_number) <- c("African American","Asian","Unknown","White","Native American")
+for (j in seq_along(race_percent_groupb)) {
+race_percent["African American"] <- race_percent["African American"] + race_percent_groupb[[j]]["African American"]
+race_percent["Asian"] <- race_percent["Asian"] + race_percent_groupb[[j]]["Asian"]
+race_percent["Unknown"] <- race_percent["Unknown"] + race_percent_groupb[[j]]["Unknown"]
+race_percent["White"] <- race_percent["White"] + race_percent_groupb[[j]]["White"]
+if(!is.na(race_percent_groupb[[j]]["Native American"])){
+race_percent["Native American"] <- race_percent["Native American"] + race_percent_groupb[[j]]["Native American"]
+}
+race_number["African American"] <- race_number["African American"] + race_number_groupb[[j]]["African American"]
+race_number["Asian"] <- race_number["Asian"] + race_number_groupb[[j]]["Asian"]
+race_number["Unknown"] <- race_number["Unknown"] + race_number_groupb[[j]]["Unknown"]
+race_number["White"] <- race_number["White"] + race_number_groupb[[j]]["White"]
+if(!is.na(race_number_groupb[[j]]["Native American"])){
+race_number["Native American"] <- race_number["Native American"] + race_number_groupb[[j]]["Native American"]
+}
+}
+race_number/length(group_receive_all)
+race_percent/length(group_receive_all)
+```
+
+ethnicity
+```{r}
+ethnicity_percent <- rep(0,3)
+ethnicity_number <- rep(0,3)
+names(ethnicity_percent) <- names(ethnicity_number) <- c("Hispanic","Not Hispanic","Unknown")
+for (j in seq_along(ethnicity_percent_groupb)) {
+ethnicity_percent["Hispanic"] <- ethnicity_percent["Hispanic"] + ethnicity_percent_groupb[[j]]["Hispanic"]
+ethnicity_percent["Not Hispanic"] <- ethnicity_percent["Not Hispanic"] + ethnicity_percent_groupb[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_percent_groupb[[j]]["Unknown"])){
+ethnicity_percent["Unknown"] <- ethnicity_percent["Unknown"] + ethnicity_percent_groupb[[j]]["Unknown"]
+}
+
+ethnicity_number["Hispanic"] <- ethnicity_number["Hispanic"] + ethnicity_number_groupb[[j]]["Hispanic"]
+ethnicity_number["Not Hispanic"] <- ethnicity_number["Not Hispanic"] + ethnicity_number_groupb[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_number_groupb[[j]]["Unknown"])){
+ethnicity_number["Unknown"] <- ethnicity_number["Unknown"] + ethnicity_number_groupb[[j]]["Unknown"]
+}
+
+}
+ethnicity_number/length(group_receive_all)
+ethnicity_percent/length(group_receive_all)
+```
+
+
+outcome
+```{r}
+outcome_percent <- rep(0,2)
+outcome_number <- rep(0,2)
+names(outcome_percent) <- names(outcome_number) <- c("alive","deceased")
+for (j in seq_along(ethnicity_percent_groupb)) {
+outcome_percent["alive"] <- outcome_percent["alive"] + outcome_percent_groupb[[j]]["alive"]
+outcome_percent["deceased"] <- outcome_percent["deceased"] + outcome_percent_groupb[[j]]["deceased"]
+
+outcome_number["alive"] <- outcome_number["alive"] + outcome_number_groupb[[j]]["alive"]
+outcome_number["deceased"] <- outcome_number["deceased"] + outcome_number_groupb[[j]]["deceased"]
+}
+outcome_percent/length(group_receive_all)
+#sd of the percentage of the outcome
+sd1 = rep(0,length(ethnicity_percent_groupa))
+for (j in seq_along(ethnicity_percent_groupa)) {
+sd1[j] =  outcome_percent_groupb[[j]]["alive"]
+}
+sd(sd1)
+outcome_number/length(group_receive_all)
+#sd of the number of the outcome
+sd2 = rep(0,length(ethnicity_percent_groupa))
+for (j in seq_along(ethnicity_percent_groupa)) {
+sd2[j] =  outcome_number_groupb[[j]]["alive"]
+}
+sd(sd2)
+```
+
+(4) Moderate comorbidity
+
+
+```{r}
+mo_cor <- cohort_new[cohort_new$moderate_comor == 1 & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]
+mo_cor <- mo_cor[!is.na(mo_cor$pat_enc_csn_id),]
+#enroll for once
+group_all1 <- mo_cor$pat_id[!mo_cor$pat_id %in% more2] 
+#enroll for several times
+group_all2 <- mo_cor$pat_id[mo_cor$pat_id %in% more2]  #4 patients
+```
+
+
+Age
+```{r}
+#age
+#enroll for once
+age_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$"age" 
+#enroll for several times
+#"Z634268"
+d1 <- cohort_new[cohort_new$pat_id == "Z634268" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d1$"age"[1])
+#"Z2656846"
+d2 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d2$"age"[2])
+#Z2417059"
+d3 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d3$"age"[2])
+#Z6223347"
+d4 <- cohort_new[cohort_new$pat_id == "Z6223347" ,]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d4$"age"[2])
+age_all <- c(age_all1,age_all2)
+format(x = mean(age_all, na.rm = T),digits = 6)
+format(sd(age_all, na.rm = T),digits = 6)
+```
+
+Gender
+```{r}
+#gender
+#enroll for once
+gender_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$sex
+#enroll for several times
+gender_all2 <- NULL
+#"Z634268"
+d1 <- cohort_new[cohort_new$pat_id == "Z634268" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d1$sex[1])
+#"Z2656846"
+d2 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d2$sex[2])
+#Z2417059"
+d3 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d3$sex[2])
+#Z6223347"
+d4 <- cohort_new[cohort_new$pat_id == "Z6223347" ,]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d4$sex[2])
+gender_all <- c(gender_all1,gender_all2)
+t1 <- table(gender_all)
+t1
+t1/length(gender_all)
+```
+
+Race
+```{r}
+#race
+#enroll for once
+race_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$race_new
+#enroll for several times
+race_all2 <- NULL
+#"Z634268"
+d1 <- cohort_new[cohort_new$pat_id == "Z634268" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d1$race_new[1])
+#"Z2656846"
+d2 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d2$race_new[2])
+#Z2417059"
+d3 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d3$race_new[2])
+#Z6223347"
+d4 <- cohort_new[cohort_new$pat_id == "Z6223347" ,]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d4$race_new[2])
+race_all <- c(race_all1,race_all2)
+t2 <- table(race_all)
+t2
+t2/length(race_all)
+```
+
+Ethnicity
+```{r}
+#Ethnicity
+#enroll for once
+eth_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$ethnicity_new
+#enroll for several times
+eth_all2 <- NULL
+#"Z634268"
+d1 <- cohort_new[cohort_new$pat_id == "Z634268" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d1$ethnicity_new[1])
+#"Z2656846"
+d2 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d2$ethnicity_new[2])
+#Z2417059"
+d3 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d3$ethnicity_new[2])
+#Z6223347"
+d4 <- cohort_new[cohort_new$pat_id == "Z6223347" ,]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d4$ethnicity_new[2])
+eth_all <- c(eth_all1,eth_all2)
+t3 <- table(eth_all)
+t3
+t3/length(eth_all)
+```
+
+whether they live in the real world (Pre-allocation)
+```{r}
+#outcome
+outcome_all1 <- as.character(rep(0,length(group_all1)))
+for (i in seq_along(group_all1)) {
+  outcome_all1[i] <- cohort_new[cohort_new$pat_id == group_all1[i],]$"dead" 
+}
+outcome_all2 <- NULL
+#"Z634268"
+d1 <- cohort_new[cohort_new$pat_id == "Z634268" ,]
+#only the second admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d1$"dead"[1])
+#"Z2656846"
+d2 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the second admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d2$"dead"[1])
+#Z2417059"
+d3 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the first admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d3$"dead"[2])
+#Z6223347"
+d4 <- cohort_new[cohort_new$pat_id == "Z6223347" ,]
+#only the first admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d4$"dead"[2])
+outcome_all <- c(outcome_all1, outcome_all2)
+t4 <- table(outcome_all)
+t4
+t4/length(outcome_all)
+```
+
+whether they live in the real world (Post-allocation)
+```{r}
+post_rate <- rep(0,10000)
+for (i in 1:10000) {
+  #cat("seed = ", i, "\n")
+  outcome_all1 <- rep("deceased",length(group_all1))
+  adf_id <- unique(allo3_all[[i]]$pat_id)
+  id_live <- group_all1[group_all1 %in% adf_id] #except "Z1390418"
+#outcome
+  outcome_all1[1:length(id_live)] <- cohort_new[cohort_new$pat_id %in% id_live,]$"dead"
+  outcome_all2 <- rep("deceased",4)
+  if("Z634268" %in% id_live){
+    d1 <- cohort_new[cohort_new$pat_id == "Z634268" ,]
+    outcome_all2[1] <- d1$"dead"[1]
+  }
+  if("Z2656846" %in% id_live){
+    d2 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+    outcome_all2[2] <- d2$"dead"[1]
+  }
+  if("Z2417059" %in% id_live){
+    d3 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+    outcome_all2[3] <- d3$"dead"[2]
+  }
+  if("Z6223347" %in% id_live){
+    d4 <- cohort_new[cohort_new$pat_id == "Z6223347" ,]
+    outcome_all2[4] <- d4$"dead"[2]
+  }
+  outcome_all <- c(outcome_all1, outcome_all2)
+  post_rate[i] <- (table(outcome_all)/length(outcome_all))[1]
+}
+mean(post_rate)
+sd(post_rate)
+```
+
+how many patients were part of group_give
+
+```{r}
+n_give <- NULL
+for (i in 1:10000) {
+  group_all <- c(group_all1,group_all2)
+  g_id <- group_give_all[[i]]$pat_id
+  n_give <- c(n_give,sum(group_all %in% g_id))
+}
+mean(n_give)
+sd(n_give)
+```
+
+
+(4) Severe comorbidity
+
+```{r}
+se_cor <- cohort_new[cohort_new$severe_comor == 1 & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]
+se_cor <- se_cor[!is.na(se_cor$pat_enc_csn_id),]
+#enroll for once
+group_all1 <- se_cor$pat_id[!se_cor$pat_id %in% more2] 
+#enroll for several times
+group_all2 <- se_cor$pat_id[se_cor$pat_id %in% more2]  #1 patient
+```
+
+
+Age
+```{r}
+#age
+#enroll for once
+age_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$"age" 
+#enroll for several times
+#"Z8138823"
+d1 <- cohort_new[cohort_new$pat_id == "Z8138823" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d1$"age"[1])
+age_all <- c(age_all1,age_all2)
+format(x = mean(age_all, na.rm = T),digits = 6)
+format(sd(age_all, na.rm = T),digits = 6)
+```
+
+Gender
+```{r}
+#gender
+#enroll for once
+gender_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$sex
+#enroll for several times
+gender_all2 <- NULL
+#"Z8138823"
+d1 <- cohort_new[cohort_new$pat_id == "Z8138823" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d1$sex[1])
+gender_all <- c(gender_all1,gender_all2)
+t1 <- table(gender_all)
+t1
+t1/length(gender_all)
+```
+
+Race
+```{r}
+#race
+#enroll for once
+race_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$race_new
+#enroll for several times
+race_all2 <- NULL
+#"Z8138823"
+d1 <- cohort_new[cohort_new$pat_id == "Z8138823" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d1$race_new[1])
+race_all <- c(race_all1,race_all2)
+t2 <- table(race_all)
+t2
+t2/length(race_all)
+```
+
+Ethnicity
+```{r}
+#Ethnicity
+#enroll for once
+eth_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$ethnicity_new
+#enroll for several times
+eth_all2 <- NULL
+#"Z8138823"
+d1 <- cohort_new[cohort_new$pat_id == "Z8138823" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d1$ethnicity_new[1])
+eth_all <- c(eth_all1,eth_all2)
+t3 <- table(eth_all)
+t3
+t3/length(eth_all)
+```
+
+whether they live in the real world (Pre-allocation)
+```{r}
+#outcome
+outcome_all1 <- as.character(rep(0,length(group_all1)))
+for (i in seq_along(group_all1)) {
+  outcome_all1[i] <- cohort_new[cohort_new$pat_id == group_all1[i],]$"dead" 
+}
+outcome_all2 <- NULL
+#"Z8138823"
+d1 <- cohort_new[cohort_new$pat_id == "Z8138823" ,]
+#only the second admission contains the crisis period
+outcome_all2 <- c(outcome_all2,d1$"dead"[1])
+outcome_all <- c(outcome_all1, outcome_all2)
+t4 <- table(outcome_all)
+t4
+t4/length(outcome_all)
+```
+
+whether they live in the real world (Post-allocation)
+```{r}
+post_rate <- rep(0,10000)
+for (i in 1:10000) {
+  #cat("seed = ", i, "\n")
+  outcome_all1 <- rep("deceased",length(group_all1))
+  adf_id <- unique(allo3_all[[i]]$pat_id)
+  id_live <- group_all1[group_all1 %in% adf_id] 
+#outcome
+  if(length(id_live) == 0){
+    outcome_all1 <- outcome_all1
+  } else {
+    outcome_all1[1:length(id_live)] <- cohort_new[cohort_new$pat_id %in% id_live,]$"dead"
+  }
+  outcome_all2 <- "deceased"
+  if("Z8138823" %in% id_live){
+    d1 <- cohort_new[cohort_new$pat_id == "Z8138823" ,]
+    outcome_all2 <- d1$"dead"[1]
+  }
+  outcome_all <- c(outcome_all1, outcome_all2)
+  post_rate[i] <- table(outcome_all)["alive"]/length(outcome_all)
+}
+
+post_rate[is.na(post_rate)] <- 0
+mean(post_rate)
+sd(post_rate)
+```
+
+how many patients were part of group_give
+
+```{r}
+n_give <- NULL
+for (i in 1:10000) {
+  group_all <- c(group_all1,group_all2)
+  g_id <- group_give_all[[i]]$pat_id
+  n_give <- c(n_give,sum(group_all %in% g_id))
+}
+mean(n_give)
+sd(n_give)
+```
+
+
+
+(5) Pregnancy
+
+```{r}
+preg <- cohort_new[cohort_new$pregnant == 1 & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]
+preg <- preg[!is.na(preg$pat_enc_csn_id),]
+#enroll for once
+group_all1 <- preg$pat_id[!preg$pat_id %in% more2] 
+#enroll for several times
+group_all2 <- preg$pat_id[preg$pat_id %in% more2]  #0 patient
+```
+
+
+Age
+```{r}
+#age
+#enroll for once
+age_all <- cohort_new[cohort_new$pat_id %in% group_all1,]$"age" 
+format(x = mean(age_all, na.rm = T),digits = 6)
+format(sd(age_all, na.rm = T),digits = 6)
+```
+
+Gender
+```{r}
+#gender
+#enroll for once
+gender_all <- cohort_new[cohort_new$pat_id %in% group_all1,]$sex
+t1 <- table(gender_all)
+t1
+t1/length(gender_all)
+```
+
+Race
+```{r}
+#race
+#enroll for once
+race_all <- cohort_new[cohort_new$pat_id %in% group_all1,]$race_new
+t2 <- table(race_all)
+t2
+t2/length(race_all)
+```
+
+Ethnicity
+```{r}
+#Ethnicity
+#enroll for once
+eth_all <- cohort_new[cohort_new$pat_id %in% group_all1,]$ethnicity_new
+t3 <- table(eth_all)
+t3
+t3/length(eth_all)
+```
+
+whether they live in the real world (Pre-allocation)
+```{r}
+#outcome
+outcome_all <- as.character(rep(0,length(group_all1)))
+for (i in seq_along(group_all1)) {
+  outcome_all[i] <- cohort_new[cohort_new$pat_id == group_all1[i],]$"dead" 
+}
+t4 <- table(outcome_all)
+t4
+t4/length(outcome_all)
+```
+
+whether they live in the real world (Post-allocation)
+```{r}
+adf_id <- unique(allo2$pat_id)
+id_live <- group_all1[group_all1 %in% adf_id] #all
+#outcome
+outcome_all <- as.character(rep(0,length(id_live)))
+for (i in seq_along(id_live)) {
+  outcome_all[i] <- cohort_new[cohort_new$pat_id == id_live[i],]$"dead" 
+}
+t4 <- table(outcome_all)
+t4
+t4/length(outcome_all)
+```
+
+(6) non-transplant
+
+```{r}
+non_trans <- cohort_new[cohort_new$non_transplant == 1 & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]
+non_trans <- non_trans[!is.na(non_trans$pat_enc_csn_id),]
+#enroll for once
+group_all1 <- non_trans$pat_id[!non_trans$pat_id %in% more2] 
+#enroll for several times
+group_all2 <- non_trans$pat_id[non_trans$pat_id %in% more2]  #0 patient
+```
+
+
+Age
+```{r}
+#age
+#enroll for once
+age_all <- cohort_new[cohort_new$pat_id %in% group_all1,]$"age" 
+format(x = mean(age_all, na.rm = T),digits = 6)
+format(sd(age_all, na.rm = T),digits = 6)
+```
+
+Gender
+```{r}
+#gender
+#enroll for once
+gender_all <- cohort_new[cohort_new$pat_id %in% group_all1,]$sex
+t1 <- table(gender_all)
+t1
+t1/length(gender_all)
+```
+
+Race
+```{r}
+#race
+#enroll for once
+race_all <- cohort_new[cohort_new$pat_id %in% group_all1,]$race_new
+t2 <- table(race_all)
+t2
+t2/length(race_all)
+```
+
+Ethnicity
+```{r}
+#Ethnicity
+#enroll for once
+eth_all <- cohort_new[cohort_new$pat_id %in% group_all1,]$ethnicity_new
+t3 <- table(eth_all)
+t3
+t3/length(eth_all)
+```
+
+whether they live in the real world (Pre-allocation)
+```{r}
+#outcome
+outcome_all <- as.character(rep(0,length(group_all1)))
+for (i in seq_along(group_all1)) {
+  outcome_all[i] <- cohort_new[cohort_new$pat_id == group_all1[i],]$"dead" 
+}
+t4 <- table(outcome_all)
+t4
+t4/length(outcome_all)
+```
+
+whether they live in the real world (Post-allocation)
+```{r}
+adf_id <- unique(allo2$pat_id)
+id_live <- group_all1[group_all1 %in% adf_id] #all
+#outcome
+outcome_all <- as.character(rep(0,length(id_live)))
+for (i in seq_along(id_live)) {
+  outcome_all[i] <- cohort_new[cohort_new$pat_id == id_live[i],]$"dead" 
+}
+t4 <- table(outcome_all)
+t4
+t4/length(outcome_all)
+```
+
+(7) transplant
+
+```{r}
+trans <- cohort_new[cohort_new$transplant == 1 & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]
+trans <- trans[!is.na(trans$pat_enc_csn_id),]
+#enroll for once
+group_all1 <- trans$pat_id[!trans$pat_id %in% more2] 
+#enroll for several times
+group_all2 <- trans$pat_id[trans$pat_id %in% more2]  #0 patient
+```
+
+
+Age
+```{r}
+#age
+#enroll for once
+age_all <- cohort_new[cohort_new$pat_id %in% group_all1,]$"age" 
+format(x = mean(age_all, na.rm = T),digits = 6)
+```
+
+Gender
+```{r}
+#gender
+#enroll for once
+gender_all <- cohort_new[cohort_new$pat_id %in% group_all1,]$sex
+t1 <- table(gender_all)
+t1
+t1/length(gender_all)
+```
+
+Race
+```{r}
+#race
+#enroll for once
+race_all <- cohort_new[cohort_new$pat_id %in% group_all1,]$race_new
+t2 <- table(race_all)
+t2
+t2/length(race_all)
+```
+
+Ethnicity
+```{r}
+#Ethnicity
+#enroll for once
+eth_all <- cohort_new[cohort_new$pat_id %in% group_all1,]$ethnicity_new
+t3 <- table(eth_all)
+t3
+t3/length(eth_all)
+```
+
+whether they live in the real world (Pre-allocation)
+```{r}
+#outcome
+outcome_all <- as.character(rep(0,length(group_all1)))
+for (i in seq_along(group_all1)) {
+  outcome_all[i] <- cohort_new[cohort_new$pat_id == group_all1[i],]$"dead" 
+}
+t4 <- table(outcome_all)
+t4
+t4/length(outcome_all)
+```
+
+whether they live in the real world (Post-allocation)
+```{r}
+adf_id <- unique(allo2$pat_id)
+id_live <- group_all1[group_all1 %in% adf_id] #all
+#outcome
+outcome_all <- as.character(rep(0,length(id_live)))
+for (i in seq_along(id_live)) {
+  outcome_all[i] <- cohort_new[cohort_new$pat_id == id_live[i],]$"dead" 
+}
+t4 <- table(outcome_all)
+t4
+t4/length(outcome_all)
+```
+
+(8) critical workers
+
+```{r}
+pre <- allo2[allo2$worker == 1 & allo2$date >= "2020-03-31" & allo2$date <= "2020-04-14",]
+```
+
+age
+```{r}
+pre_id <- unique(pre$pat_enc_csn_id)
+age_ex <- mean(cohort_new[cohort_new$pat_enc_csn_id %in% pre_id,]$"age")
+sd_ex <- sd(cohort_new[cohort_new$pat_enc_csn_id %in% pre_id,]$"age")
+#mean
+age_ex
+#sd
+sd_ex
+```
+
+
+sex
+```{r}
+pre_id <- unique(pre$pat_enc_csn_id)
+sex_ex <- table(cohort_new[cohort_new$pat_enc_csn_id %in% pre_id,]$"sex")
+sex_ex_p <- table(cohort_new[cohort_new$pat_enc_csn_id %in% pre_id,]$"sex")/length(pre_id)
+sex_ex
+sex_ex_p
+```
+
+race
+```{r}
+pre_id <- unique(pre$pat_enc_csn_id)
+race_ex <- table(cohort_new[cohort_new$pat_enc_csn_id %in% pre_id,]$"race_new")
+race_ex_p <- table(cohort_new[cohort_new$pat_enc_csn_id %in% pre_id,]$"race_new")/length(pre_id)
+race_ex
+race_ex_p
+```
+
+ethnicity
+```{r}
+pre_id <- unique(pre$pat_enc_csn_id)
+eth_ex <- table(cohort_new[cohort_new$pat_enc_csn_id %in% pre_id,]$"ethnicity_new")
+eth_ex_p <- table(cohort_new[cohort_new$pat_enc_csn_id %in% pre_id,]$"ethnicity_new")/length(pre_id)
+eth_ex
+eth_ex_p
+```
+
+outcome
+```{r}
+pre_id <- unique(pre$pat_enc_csn_id)
+dead_ex <- table(cohort_new[cohort_new$pat_enc_csn_id %in% pre_id,]$"dead")
+dead_ex_p <- table(cohort_new[cohort_new$pat_enc_csn_id %in% pre_id,]$"dead")/length(pre_id) 
+dead_ex
+dead_ex_p
+```
+
+
+
+
+

@@ -1,0 +1,3493 @@
+---
+title: "Results_big_02_04"
+author: "Jianan Zhu"
+date: "2023-02-04"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(readxl)
+library(tibble)
+```
+
+load the 100 simulations
+```{r}
+load("ventilator_big.RData")
+load("date.RData")
+load("df.RData")
+load("dataset.RData")
+```
+
+
+### 1. Figure 1
+
+(1) start date of the crisis period
+```{r}
+table(start_date)
+```
+
+(2) last_date of the crisis period
+```{r}
+table(last_date)
+```
+
+(3) number of days between start & end of crisis period
+```{r}
+table(total)
+```
+It's obvious to see that 95% simulations end on 4/14.
+
+(4) total number of patients after allocation for each day
+
+```{r}
+options(digits = 3)
+sum_v <- rep(0, length(v_all[[1]]))
+t = total == 15
+v_all_15 <- v_all[t]
+for(i in 1:length(v_all_15)){
+  sum_v <- sum_v + v_all_15[[i]]
+}
+names(sum_v) <- d 
+sum_v/length(v_all_15)
+```
+
+
+
+
+### 3. Race
+
+```{r include = FALSE}
+#race regroup
+cohort_new <- add_column(cohort_new, race_new = NA)
+cohort_new[cohort_new$race %in% c("White","Unknown, White",
+                                  "Other Race, White","White, Other Race",
+                                  "White, Unknown",
+                                  "White, Other Pacific Islander",
+                                  "White;Other Race",
+                                  "White;Other Race",
+                                  "Patient Refused;White",
+                                  "Other Race;White"),]$race_new <- "White"
+cohort_new[cohort_new$race %in% c("African American (Black)",
+                                  "African American (Black), White",
+                                  "African American (Black), Bangladeshi",
+                                  "Chinese;African American (Black)",
+                                  "White;African American (Black)",
+                                  "Bangladeshi;African American (Black)"),]$race_new <- "African American"
+cohort_new[cohort_new$race %in% c("Asian","Chinese","Chinese, Asian - unspecified","Japanese",
+                                  "Pakistani","Bangladeshi","Asian - unspecified, Other Race",
+                                  "Korean, Unknown","Other Pacific Islander","Asian Indian",
+                                  "Asian - unspecified","Unknown, Chinese","Chinese, Other Race",
+                                  "Filipino","Filipino, Other Pacific Islander",
+                                  "Other Race, Chinese",
+                                  "Asian;Asian - unspecified",
+                                  "Korean","Other Race;Chinese",
+                                  "Chinese;Asian - unspecified",
+                                  "Vietnamese","Asian Indian;Other Race",
+                                  "Asian - unspecified;Chinese",
+                                  "Chinese;Asian"),]$race_new <- "Asian"
+cohort_new[cohort_new$race %in% c("Native American (American Indian/Eskimo/Aleutian)",
+                                  "Native American (American Indian/Eskimo/Aleutian) , Other Pacific Islander",
+                                  "White;Native American (American Indian/Eskimo/Aleutian)",
+                                  "Other Pacific Islander;Native American (American Indian/Eskimo/Aleutian)",
+                                  "Native American (American Indian/Eskimo/Aleutian) ;African American (Black)",
+                                  "Other Pacific Islander;White",
+                                  "Filipino;Other Pacific Islander",
+                                  "Native American (American Indian/Eskimo/Aleutian) ;African American (Black)"),]$race_new <- "Native American"
+cohort_new[cohort_new$race %in% c("Unknown","Other Race",NA,"Patient Refused",
+                                  "Unknown, Other Race","Other Race, Unknown","0"),]$race_new <- "Unknown"
+cohort_new[is.na(cohort_new$race_new),]
+#ethnicity regroup
+cohort_new <- add_column(cohort_new, ethnicity_new = NA)
+cohort_new[cohort_new$ethnicity %in% c("Not of Spanish/Hispanic Origin",
+                                       "Not of Spanish/Hispanic Origin, Unknown"),]$ethnicity_new <- "Not Hispanic"
+cohort_new[cohort_new$ethnicity %in% c("Patient Refused","Unknown",
+                                       "Unknown, Not of Spanish/Hispanic Origin",NA),]$ethnicity_new <- "Unknown"
+cohort_new[is.na(cohort_new$ethnicity_new),]$ethnicity_new <- "Hispanic"
+cohort_new[is.na(cohort_new$ethnicity_new),]
+
+#select patients that ever on ecmo
+ecmo <- cohort_new[which(cohort_new$ever_on_ecmo == TRUE),]
+sofa_new$date <- as.Date(sofa_new$date, format = "%Y-%m-%d")
+
+#for patients that ever on ecmo, remove rows with dates on and after ecmo
+id_ecmo <- unique(sofa_new$pat_id)[unique(sofa_new$pat_id) %in% ecmo$pat_id]
+#patients who ever on ecmo
+list_ecmo <- lapply(id_ecmo, function(i){
+  edate <- ecmo$ecmo_start_time[ecmo$pat_id == i]
+  df <- sofa_new[sofa_new$pat_id == i,]
+  df <- df[df$date < edate,]
+})
+sofa2 <- sofa_new[!sofa_new$pat_id %in% id_ecmo,] #patients who are never on ecmo
+for (i in seq_along(list_ecmo)) {
+  sofa2 <- rbind(list_ecmo[[i]],sofa2)
+}
+
+#remove rows with NA in sofa2
+sofa2 <- na.omit(sofa2)
+
+
+
+# "Z8282529"
+cohort_new <- cohort_new[!(cohort_new$pat_id == "Z8282529" & cohort_new$pat_enc_csn_id == 788823744),]
+sofa2 <- sofa2[!(sofa2$pat_id == "Z8282529" & sofa2$`SOFA Vtot` == "EMPTY"),]
+
+#patients who have intubated for several times
+patients <- unique(sofa2$pat_id)
+all_patients <- patients[patients %in% cohort_new$pat_id]
+#2209 in total
+#length(all_patients)
+sofa2 <- sofa2[sofa2$pat_id %in% all_patients,]
+cohort_new <- cohort_new[cohort_new$pat_id %in% all_patients,]
+a <- table(cohort_new$pat_id) > 1
+more2 <- names(table(cohort_new$pat_id))[a]
+
+#intubate once
+n_patients <- all_patients[!all_patients %in% more2]
+
+#patients who intubated for several times
+#the number of discharge
+discharge_time <- rep(0, length(more2))
+for (i in seq_along(more2)) {
+  discharge_time[i] <- nrow(cohort_new[cohort_new$pat_id == more2[i],])
+}
+
+#the number of intubation is 2: first intubation date = the second excubation date
+for (i in more2) {
+  c_more2 <- cohort_new[cohort_new$pat_id == i,]
+  s_more2 <- sofa2[sofa2$pat_id == i,]
+  date_more2 <- sort(c_more2$"extubation_date")
+  date2_more2 <- sort(c_more2$"intubation_date")
+  if(length(date_more2) == 2){
+    if(as.character(date2_more2[2]) == as.character(date_more2[1])){
+      cohort_new[(cohort_new$pat_id == i & cohort_new$extubation_date == date_more2[2]),]$intubation_date <- date2_more2[1]
+      cohort_new <- cohort_new[!(cohort_new$pat_id == i & cohort_new$extubation_date == date_more2[1]),]
+    }
+  }
+}
+
+#update more2
+a2 <- table(cohort_new$pat_id) > 1
+more2 <- names(table(cohort_new$pat_id))[a2]
+
+#the number of discharge is 3: first discharge date = the second admission date or the second discharge date = the third admission date
+for (i in more2) {
+  c_more2 <- cohort_new[cohort_new$pat_id == i,]
+  s_more2 <- sofa2[sofa2$pat_id == i,]
+  date_more2 <- sort(c_more2$"extubation_date")
+  date2_more2 <- sort(c_more2$"intubation_date")
+  if(length(date_more2) == 3){
+    if(as.character(date2_more2[2]) == as.character(date_more2[1])){
+      cohort_new[(cohort_new$pat_id == i & cohort_new$intubation_date == date2_more2[1]),]$extubation_date <- date_more2[2]
+      cohort_new <- cohort_new[!(cohort_new$pat_id == i & cohort_new$intubation_date == date2_more2[2]),]
+    } else if(as.character(date2_more2[3]) == as.character(date_more2[2])){
+      cohort_new[(cohort_new$pat_id == i & cohort_new$intubation_date == date2_more2[2]),]$extubation_date <- date_more2[3]
+      cohort_new <- cohort_new[!(cohort_new$pat_id == i & cohort_new$intubation_date == date2_more2[3]),]
+    }
+  }
+}
+
+
+
+#special case: "Z992380"
+cohort_new <- cohort_new[!(cohort_new$pat_id == "Z992380" & as.character(cohort_new$extubation_date) == "2020-05-22"),]
+cohort_new <- cohort_new[!(cohort_new$pat_id == "Z992380" & as.character(cohort_new$intubation_date) == "2020-05-28"),]
+
+
+#speical "Z2986501"
+cohort_new[(cohort_new$pat_id == "Z2986501" & cohort_new$pat_enc_csn_id == 783121775),]$extubation_date <- as.Date("2020-06-03",format = "%Y-%m-%d")
+
+#update more2
+a2 <- table(cohort_new$pat_id) > 1
+more2 <- names(table(cohort_new$pat_id))[a2]
+#the number of excubation
+discharge_time <- rep(0, length(more2))
+for (i in seq_along(more2)) {
+  discharge_time[i] <- nrow(cohort_new[cohort_new$pat_id == more2[i],])
+}
+
+
+
+
+#use the higher sofa score
+l <- rep(0, length(all_patients))
+for (i in seq_along(all_patients)) {
+  s_more2 <- sofa2[sofa2$pat_id == all_patients[i],]
+  v1 <- names(table(s_more2$date))[table(s_more2$date) > 1]
+  l[i] <- length(v1)
+  if(length(v1) == 1){
+    if(sum(s_more2[s_more2$date == v1,]$`SOFA Vtot` == "EMPTY") > 0){
+      sofa2 <- sofa2[!(sofa2$pat_id == all_patients[i] & sofa2$date == v1 & sofa2$`SOFA Vtot` == "EMPTY"),]
+    } else {
+      b <- min(s_more2[s_more2$date == v1,]$`SOFA Vtot`)
+      sofa2 <- sofa2[!(sofa2$pat_id == all_patients[i] & sofa2$date == v1 & sofa2$`SOFA Vtot` == b),]
+    }
+  }
+}
+
+
+
+#add a column "intubated_day" in sofa2
+#patients who enrolled once
+sofa2 <- sofa2 %>% add_column(intubated_day = NA)
+
+#patients who intubated once
+n_patients <- all_patients[!all_patients %in% more2]
+for (i in n_patients) {
+  a <- nrow(sofa2[sofa2$pat_id == i,][,"intubated_day"])
+  sofa2[sofa2$pat_id == i,][,"intubated_day"] <- 0:(a-1)
+}
+
+#2 or 3
+for (i in more2) {
+  c_more2 <- cohort_new[cohort_new$pat_id == i,]
+  s_more2 <- sofa2[sofa2$pat_id == i,]
+  date_more2 <- sort(c_more2$"extubation_date")
+  date2_more2 <- sort(c_more2$"intubation_date")
+  ss <- NULL
+  ss[[1]] <- s_more2[as.character(s_more2$date) < as.character(date2_more2[2]),]
+  n_ss1 <- nrow(ss[[1]][,"intubated_day"])
+  if(n_ss1 == 0){
+    ss[[1]] <- ss[[1]]
+  } else {
+    ss[[1]][,"intubated_day"] <- 0:(n_ss1-1)
+  }
+  #date <- sort(s_more2[s_more2$date <= date_more2[j] & s_more2$date > date_more2[j-1],]$date)
+  if(length(date_more2) == 2){
+    ss[[2]] <- s_more2[as.character(s_more2$date) > as.character(date_more2[1]),]
+    n_ss2 <- nrow(ss[[2]][,"intubated_day"])
+    if(n_ss2 == 0){
+      ss[[2]] <- ss[[2]]
+    } else {
+      ss[[2]][,"intubated_day"] <- 0:(n_ss2-1)
+    }
+  } else if(length(date_more2) == 3){
+    ss[[2]] <- s_more2[(as.character(s_more2$date) > as.character(date_more2[1]) & as.character(s_more2$date) < as.character(date2_more2[3])),]
+    n_ss2 <- nrow(ss[[2]][,"intubated_day"])
+    if(n_ss2 == 0){
+      ss[[2]] <- ss[[2]]
+    } else {
+      ss[[2]][,"intubated_day"] <- 0:(n_ss2-1)
+    }
+    ss[[3]] <- s_more2[as.character(s_more2$date) > as.character(date_more2[2]),]
+    n_ss3 <- nrow(ss[[3]][,"intubated_day"])
+    if(n_ss2 == 0){
+      ss[[3]] <- ss[[3]]
+    } else {
+      ss[[3]][,"intubated_day"] <- 0:(n_ss3-1)
+    }
+  } else if (length(date_more2) == 4){
+    ss[[2]] <- s_more2[(as.character(s_more2$date) > as.character(date_more2[1]) & as.character(s_more2$date) < as.character(date2_more2[3])),]
+    n_ss2 <- nrow(ss[[2]][,"intubated_day"])
+    if(n_ss2 == 0){
+      ss[[2]] <- ss[[2]]
+    } else {
+      ss[[2]][,"intubated_day"] <- 0:(n_ss2-1)
+    }
+    ss[[3]] <- s_more2[as.character(s_more2$date) > as.character(date_more2[2]) & as.character(s_more2$date) < as.character(date2_more2[4]),]
+    n_ss3 <- nrow(ss[[3]][,"intubated_day"])
+    if(n_ss3 == 0){
+      ss[[3]] <- ss[[3]]
+    } else {
+      ss[[3]][,"intubated_day"] <- 0:(n_ss3-1)
+    }
+    ss[[4]] <- s_more2[as.character(s_more2$date) > as.character(date_more2[3]),]
+    n_ss4 <- nrow(ss[[4]][,"intubated_day"])
+    if(n_ss4 == 0){
+      ss[[4]] <- ss[[4]]
+    } else {
+      ss[[4]][,"intubated_day"] <- 0:(n_ss4-1)
+    }
+  } else if (length(date_more2) == 5){
+    ss[[2]] <- s_more2[(as.character(s_more2$date) > as.character(date_more2[1]) & as.character(s_more2$date) < as.character(date2_more2[3])),]
+    n_ss2 <- nrow(ss[[2]][,"intubated_day"])
+    if(n_ss2 == 0){
+      ss[[2]] <- ss[[2]]
+    } else {
+      ss[[2]][,"intubated_day"] <- 0:(n_ss2-1)
+    }
+    ss[[3]] <- s_more2[as.character(s_more2$date) > as.character(date_more2[2]) & as.character(s_more2$date) < as.character(date2_more2[4]),]
+    n_ss3 <- nrow(ss[[3]][,"intubated_day"])
+    if(n_ss3 == 0){
+      ss[[3]] <- ss[[3]]
+    } else {
+      ss[[3]][,"intubated_day"] <- 0:(n_ss3-1)
+    }
+    ss[[4]] <- s_more2[as.character(s_more2$date) > as.character(date_more2[3]) & as.character(s_more2$date) < as.character(date2_more2[5]),]
+    n_ss4 <- nrow(ss[[4]][,"intubated_day"])
+    if(n_ss4 == 0){
+      ss[[4]] <- ss[[4]]
+    } else {
+      ss[[4]][,"intubated_day"] <- 0:(n_ss4-1)
+    }
+    ss[[5]] <- s_more2[as.character(s_more2$date) > as.character(date_more2[4]),]
+    n_ss5 <- nrow(ss[[5]][,"intubated_day"])
+    if(n_ss5 == 0){
+      ss[[5]] <- ss[[5]]
+    } else {
+      ss[[5]][,"intubated_day"] <- 0:(n_ss5-1)
+    }
+  }
+  ss_f <- NULL
+  for (m in 1:length(ss)){
+    ss_f <- rbind(ss[[m]],ss_f)
+  }
+  dates <- ss_f$date
+  for(t in dates){
+    sofa2[sofa2$pat_id == i & sofa2$date == t,][,"intubated_day"] <- ss_f[ss_f$date == t, ]$intubated_day
+  }
+}
+
+
+# patients with gaps
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 787589003, ]
+a <- nrow(sofa2[sofa2$pat_enc_csn_id == 787589003 & sofa2$date >= "2020-04-08",])
+sofa2[sofa2$pat_enc_csn_id == 787589003 & sofa2$date >= "2020-04-08",][,"intubated_day"] <- 0:(a-1)
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 787201513, ]
+a <- nrow(sofa2[sofa2$pat_enc_csn_id == 787201513 & sofa2$date >= "2020-04-09",])
+sofa2[sofa2$pat_enc_csn_id == 787201513 & sofa2$date >= "2020-04-09",][,"intubated_day"] <- 0:(a-1)
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 786808306, ]
+a <- nrow(sofa2[sofa2$pat_enc_csn_id == 786808306 & sofa2$date >= "2020-04-13",])
+sofa2[sofa2$pat_enc_csn_id == 786808306 & sofa2$date >= "2020-04-13",][,"intubated_day"] <- 0:(a-1)
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 785992482, ]
+a <- nrow(sofa2[sofa2$pat_enc_csn_id == 785992482 & as.character(sofa2$date) %in% c("2020-04-07","2020-04-08"),])
+sofa2[sofa2$pat_enc_csn_id == 785992482 & as.character(sofa2$date) %in% c("2020-04-07","2020-04-08"),][,"intubated_day"] <- 0:(a-1)
+a <- nrow(sofa2[sofa2$pat_enc_csn_id == 785992482 & sofa2$date >= "2020-04-12",])
+sofa2[sofa2$pat_enc_csn_id == 785992482 & sofa2$date >= "2020-04-12",][,"intubated_day"] <- 0:(a-1)
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 786079332, ]
+sofa2[sofa2$pat_enc_csn_id == 786079332 & sofa2$date == "2020-04-14",][,"intubated_day"] <- 0
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 788093316, ]
+sofa2[sofa2$pat_enc_csn_id == 788093316 & sofa2$date == "2020-04-15",][,"intubated_day"] <- 0
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 787235801, ]
+a <- nrow(sofa2[sofa2$pat_enc_csn_id == 787235801 & sofa2$date >= "2020-04-14",])
+sofa2[sofa2$pat_enc_csn_id == 787235801 & sofa2$date >= "2020-04-14",][,"intubated_day"] <- 0:(a-1)
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 787507206, ]
+a <- nrow(sofa2[sofa2$pat_enc_csn_id == 787507206 & sofa2$date >= "2020-04-11",])
+sofa2[sofa2$pat_enc_csn_id == 787507206 & sofa2$date >= "2020-04-11",][,"intubated_day"] <- 0:(a-1)
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 787021423, ]
+a <- nrow(sofa2[sofa2$pat_enc_csn_id == 787021423 & sofa2$date >= "2020-04-10",])
+sofa2[sofa2$pat_enc_csn_id == 787021423 & sofa2$date >= "2020-04-10",][,"intubated_day"] <- 0:(a-1)
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 788329900, ]
+a <- nrow(sofa2[sofa2$pat_enc_csn_id == 788329900 & sofa2$date >= "2020-04-18",])
+sofa2[sofa2$pat_enc_csn_id == 788329900 & sofa2$date >= "2020-04-18",][,"intubated_day"] <- 0:(a-1)
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 787685061, ]
+a <- nrow(sofa2[sofa2$pat_enc_csn_id == 787685061 & sofa2$date >= "2020-04-19",])
+sofa2[sofa2$pat_enc_csn_id == 787685061 & sofa2$date >= "2020-04-19",][,"intubated_day"] <- 0:(a-1)
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 787651330, ]
+a <- nrow(sofa2[sofa2$pat_enc_csn_id == 787651330 & sofa2$date >= "2020-04-16",])
+sofa2[sofa2$pat_enc_csn_id == 787651330 & sofa2$date >= "2020-04-16",][,"intubated_day"] <- 0:(a-1)
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 788386858, ]
+sofa_gap <- sofa2[sofa2$pat_enc_csn_id == 788266226, ]
+
+
+#use the value of day1 for day0
+#ONLY FOR PATIENTS WITH SOFA AS EMPTY ON DAY0
+E0 <- sofa2$`SOFA Vtot` == "EMPTY" & sofa2$intubated_day == 0
+p0 <- sofa2[E0,]
+t0 <- table(p0$pat_id)
+p1 <- names(t0)[t0 == 1]
+for (i in seq_along(p1)) {
+  a <- nrow(sofa2[sofa2$pat_id == p1[i],])
+  if(a > 1){
+    sofa2[sofa2$pat_id == p1[i], "SOFA Vtot"][1,] <- sofa2[sofa2$pat_id == p1[i], "SOFA Vtot"][2,]
+  }
+}
+
+#replace the remaining EMPTY as 0
+sofa2$`SOFA Vtot`[sofa2$`SOFA Vtot` == "EMPTY"] <- "0"
+sofa2$`SOFA Vtot` <- as.numeric(sofa2$`SOFA Vtot`)
+
+
+
+#add a column "group" in sofa2
+sofa <- as.numeric(sofa2$`SOFA Vtot`)
+intu <- sofa2$intubated_day
+sofa2 <- sofa2 %>% add_column(group = NA)
+for (i in 1:nrow(sofa2)) {
+  if(intu[i] == 0){ #day0
+    if(sofa[i] > 11){
+      sofa2[i,]$group <-"Blue"
+    } else if(sofa[i] <= 7){
+      sofa2[i,]$group <-"Red"
+    } else {
+      sofa2[i,]$group <-"Yellow"
+    }
+  } else if(intu[i] == 2){ #day2
+    if(sofa[i] <= 11 & (sofa[i] < sofa[i-2])){
+      sofa2[i,]$group <-"Red"
+    } else if(sofa[i] <= 7 & (sofa[i] == sofa[i-2])){
+      sofa2[i,]$group <-"Yellow"
+    } else {
+      sofa2[i,]$group <-"Blue"
+    }
+  } else if(intu[i] == 5){ #day5
+    if(sofa[i] <= 7 & ((sofa[i-3]-sofa[i])>=3)){
+      sofa2[i,]$group <-"Red"
+    } else if(sofa[i] <= 7 & ((sofa[i-3]-sofa[i])<3) & (0<(sofa[i-3]-sofa[i]))){
+      sofa2[i,]$group <-"Yellow"
+    } else {
+      sofa2[i,]$group <-"Blue"
+    }
+  } else if(intu[i] > 5 & (intu[i]%%2==1)){ #odd days after day5
+    if(sofa[i] <= 7 &(sofa[i-2]-sofa[i]>0)){
+      sofa2[i,]$group <-"Yellow"
+    } else {
+      sofa2[i,]$group <-"Blue"
+    }
+  } else {
+    sofa2[i,]$group <-"White"
+  }
+}
+#now the big dataset is `sofa2`
+
+
+cohort_new[is.na(cohort_new$race_new),]$race
+cohort_new[is.na(cohort_new$ethnicity_new),]$ethnicity
+```
+
+
+
+
+
+
+(1) cohort (674, from 3-31 to 4-14, before allocation): the age, gender, race and ethnicity, whether they live in the real world 
+
+```{r}
+s_date <- as.Date("2020-03-31",format = ("%Y-%m-%d"))
+la_date <- as.Date("2020-04-14",format = ("%Y-%m-%d"))
+v_date <- seq(s_date,la_date,by = 1)
+group_all <- NULL
+for (k in v_date) {
+  c_df <- sofa2 %>% filter(date == k)
+  group_all <- unique(c(group_all,unique(c_df$pat_id)))
+}
+#enroll for once
+group_all1 <- group_all[!group_all %in% more2] 
+#enroll for several times
+group_all2 <- group_all[group_all %in% more2] #14 patients
+
+#"Z8089628" has two encounter ids in the crisis period
+```
+
+Age
+```{r}
+#age
+#enroll for once
+age_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$"age (y)" 
+#enroll for several times
+#"Z8268782"
+age_all2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8268782",]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d1$"age (y)"[1])
+#"Z634268"
+d3 <- cohort_new[cohort_new$pat_id == "Z634268",]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d3$"age (y)"[1])
+#"Z1906509"
+d4 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d4$"age (y)"[1])
+#"Z5874193"
+d5 <- cohort_new[cohort_new$pat_id == "Z5874193",]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d5$"age (y)"[1])
+#"Z8138823"
+d6 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d6$"age (y)"[1])
+#"Z6223347"
+d7 <- cohort_new[cohort_new$pat_id == "Z6223347",]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d7$"age (y)"[2])
+#"Z639784" 
+d8 <- cohort_new[cohort_new$pat_id == "Z639784" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d8$"age (y)"[2])
+#"Z2173404"
+d9 <- cohort_new[cohort_new$pat_id == "Z2173404" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d9$"age (y)"[2])
+#Z8223957"
+d10 <- cohort_new[cohort_new$pat_id == "Z8223957" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d10$"age (y)"[2])
+#"Z3338372"
+d11 <- cohort_new[cohort_new$pat_id == "Z3338372" ,]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d11$"age (y)"[1])
+#"Z7002226"
+d12 <- cohort_new[cohort_new$pat_id == "Z7002226" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d12$"age (y)"[2])
+#"Z2417059"
+d13 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the second admission contains the crisis period
+age_all2 <- c(age_all2,d13$"age (y)"[2])
+#Z8089628"
+d14 <- cohort_new[cohort_new$pat_id == "Z8089628" ,]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d14$"age (y)"[1])
+#"Z2656846"
+d15 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the first admission contains the crisis period
+age_all2 <- c(age_all2,d15$"age (y)"[1])
+
+age_all <- c(age_all1,age_all2)
+
+#NA
+id_na <- cohort_new$pat_id[cohort_new$pat_id %in% group_all1][which(is.na(age_all1))]
+cohort_new[cohort_new$pat_id == id_na,]
+
+format(x = mean(age_all, na.rm = T),digits = 6)
+format(sd(age_all, na.rm = T),digits = 6)
+```
+
+Gender
+```{r}
+#gender
+#enroll for once
+gender_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$sex
+#enroll for several times
+#"Z8268782"
+gender_all2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8268782",]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d1$sex[1])
+#"Z634268"
+d3 <- cohort_new[cohort_new$pat_id == "Z634268",]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d3$sex[1])
+#"Z1906509"
+d4 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d4$sex[1])
+#"Z5874193"
+d5 <- cohort_new[cohort_new$pat_id == "Z5874193",]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d5$sex[1])
+#"Z8138823"
+d6 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d6$sex[1])
+#"Z6223347"
+d7 <- cohort_new[cohort_new$pat_id == "Z6223347",]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d7$sex[2])
+#"Z639784" 
+d8 <- cohort_new[cohort_new$pat_id == "Z639784" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d8$sex[2])
+#"Z2173404"
+d9 <- cohort_new[cohort_new$pat_id == "Z2173404" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d9$sex[2])
+#Z8223957"
+d10 <- cohort_new[cohort_new$pat_id == "Z8223957" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d10$sex[2])
+#"Z3338372"
+d11 <- cohort_new[cohort_new$pat_id == "Z3338372" ,]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d11$sex[1])
+#"Z7002226"
+d12 <- cohort_new[cohort_new$pat_id == "Z7002226" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d12$sex[2])
+#"Z2417059"
+d13 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the second admission contains the crisis period
+gender_all2 <- c(gender_all2,d13$sex[2])
+#Z8089628"
+d14 <- cohort_new[cohort_new$pat_id == "Z8089628" ,]
+#both admissions contain the crisis period
+gender_all2 <- c(gender_all2,d14$sex[1],d14$sex[2])
+#"Z2656846"
+d15 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the first admission contains the crisis period
+gender_all2 <- c(gender_all2,d15$sex[1])
+gender_all <- c(gender_all1,gender_all2)
+t1 <- table(gender_all)
+t1
+t1/length(gender_all)
+```
+
+Race
+```{r}
+#race
+#enroll for once
+race_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$race_new
+#enroll for several times
+#"Z8268782"
+race_all2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8268782",]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d1$race_new[1])
+#"Z634268"
+d3 <- cohort_new[cohort_new$pat_id == "Z634268",]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d3$race_new[1])
+#"Z1906509"
+d4 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d4$race_new[1])
+#"Z5874193"
+d5 <- cohort_new[cohort_new$pat_id == "Z5874193",]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d5$race_new[1])
+#"Z8138823"
+d6 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d6$race_new[1])
+#"Z6223347"
+d7 <- cohort_new[cohort_new$pat_id == "Z6223347",]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d7$race_new[2])
+#"Z639784" 
+d8 <- cohort_new[cohort_new$pat_id == "Z639784" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d8$race_new[2])
+#"Z2173404"
+d9 <- cohort_new[cohort_new$pat_id == "Z2173404" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d9$race_new[2])
+#Z8223957"
+d10 <- cohort_new[cohort_new$pat_id == "Z8223957" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d10$race_new[2])
+#"Z3338372"
+d11 <- cohort_new[cohort_new$pat_id == "Z3338372" ,]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d11$race_new[1])
+#"Z7002226"
+d12 <- cohort_new[cohort_new$pat_id == "Z7002226" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d12$race_new[2])
+#"Z2417059"
+d13 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the second admission contains the crisis period
+race_all2 <- c(race_all2,d13$race_new[2])
+#Z8089628"
+d14 <- cohort_new[cohort_new$pat_id == "Z8089628" ,]
+#both admission contain the crisis period
+race_all2 <- c(race_all2,d14$race_new[1],d14$race_new[2])
+#"Z2656846"
+d15 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the first admission contains the crisis period
+race_all2 <- c(race_all2,d15$race_new[1])
+race_all <- c(race_all1,race_all2)
+t2 <- table(race_all)
+t2
+t2/length(race_all)
+```
+
+Ethnicity
+```{r}
+#Ethnicity
+#enroll for once
+eth_all1 <- cohort_new[cohort_new$pat_id %in% group_all1,]$ethnicity_new
+#enroll for several times
+#"Z8268782"
+eth_all2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8268782",]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d1$ethnicity_new[1])
+#"Z634268"
+d3 <- cohort_new[cohort_new$pat_id == "Z634268",]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d3$ethnicity_new[1])
+#"Z1906509"
+d4 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d4$ethnicity_new[1])
+#"Z5874193"
+d5 <- cohort_new[cohort_new$pat_id == "Z5874193",]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d5$ethnicity_new[1])
+#"Z8138823"
+d6 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d6$ethnicity_new[1])
+#"Z6223347"
+d7 <- cohort_new[cohort_new$pat_id == "Z6223347",]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d7$ethnicity_new[2])
+#"Z639784" 
+d8 <- cohort_new[cohort_new$pat_id == "Z639784" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d8$ethnicity_new[2])
+#"Z2173404"
+d9 <- cohort_new[cohort_new$pat_id == "Z2173404" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d9$ethnicity_new[2])
+#Z8223957"
+d10 <- cohort_new[cohort_new$pat_id == "Z8223957" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d10$ethnicity_new[2])
+#"Z3338372"
+d11 <- cohort_new[cohort_new$pat_id == "Z3338372" ,]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d11$ethnicity_new[1])
+#"Z7002226"
+d12 <- cohort_new[cohort_new$pat_id == "Z7002226" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d12$ethnicity_new[2])
+#"Z2417059"
+d13 <- cohort_new[cohort_new$pat_id == "Z2417059" ,]
+#only the second admission contains the crisis period
+eth_all2 <- c(eth_all2,d13$ethnicity_new[2])
+#Z8089628"
+d14 <- cohort_new[cohort_new$pat_id == "Z8089628" ,]
+#oboth admission contain the crisis period
+eth_all2 <- c(eth_all2,d14$ethnicity_new[1],d14$ethnicity_new[2])
+#"Z2656846"
+d15 <- cohort_new[cohort_new$pat_id == "Z2656846" ,]
+#only the first admission contains the crisis period
+eth_all2 <- c(eth_all2,d15$ethnicity_new[1])
+
+eth_all <- c(eth_all1,eth_all2)
+t3 <- table(eth_all)
+t3
+t3/length(eth_all)
+```
+
+whether they live in the real world 
+```{r}
+#outcome
+cohort_new[is.na(cohort_new$dead),]$dead <- 0
+cohort_new$dead <- as.character(cohort_new$dead)
+cohort_new[cohort_new$dead == "1",]$dead <- "deceased"
+cohort_new[cohort_new$dead == "0",]$dead <- "alive"
+outcome_all1 <- as.character(rep(0,length(group_all1)))
+for (i in seq_along(group_all1)) {
+  outcome_all1[i] <- cohort_new[cohort_new$pat_id == group_all1[i],]$"dead" 
+}
+outcome_all2 <- as.character(rep(0,length(group_all2)))
+for (i in seq_along(group_all2)) {
+  se_outcome <- cohort_new[cohort_new$pat_id == group_all2[i],]$"dead"
+  if(sum(se_outcome == "deceased") == 1){
+    outcome_all2[i] <- "deceased" 
+  } else {
+    outcome_all2[i] <- "alive" 
+  }
+}
+outcome_all <- c(outcome_all1, outcome_all2,"alive")
+t4 <- table(outcome_all)
+t4
+t4/length(outcome_all)
+```
+
+(2) new_red (before allocation): the age, gender, race and ethnicity, whether they live in the real world
+
+```{r}
+v_date <- seq(s_date,la_date,by = 1)
+NR_id <- NULL
+NY_id <- NULL
+NB_id <- NULL
+for(i in seq_along(v_date)){
+  sdf <- sofa2 %>% filter(date == v_date[i])
+  NR_id <- unique(c(NR_id,sdf[sdf$group == "Red" & sdf$intubated_day == 0,]$pat_id))
+  NY_id <- unique(c(NY_id,sdf[sdf$group == "Yellow" & sdf$intubated_day == 0,]$pat_id))
+  NB_id <- unique(c(NB_id,sdf[sdf$group == "Blue" & sdf$intubated_day == 0,]$pat_id))
+}
+```
+
+sofa score
+```{r}
+score_r <- NULL
+for (i in seq_along(v_date)) {
+  sdf <- sofa2 %>% filter(date == v_date[i])
+  score_r <- c(score_r,sdf[sdf$group == "Red" & sdf$intubated_day == 0,]$`SOFA Vtot`)
+}
+format(mean(score_r),digits = 5)
+format(sd(score_r),digits = 5)
+```
+
+mean is 4.703704, srandard deviation is 2.091568
+
+Age
+```{r}
+#enroll for once
+NR_id1 <- NR_id[!NR_id %in% more2] 
+#enroll for several times
+NR_id2 <- NR_id[NR_id %in% more2]
+#enroll for once
+age_new1 <- cohort_new[cohort_new$pat_id %in% NR_id1,]$"age (y)"
+#enroll for several times
+#"Z8223957"
+age_new2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission starts in the crisis period
+age_new2 <- c(age_new2,d1$"age (y)"[2])
+#"Z3338372"
+d2 <- cohort_new[cohort_new$pat_id == "Z3338372",]
+#only the second admission contains the crisis period
+age_new2 <- c(age_new2,d2$"age (y)"[2])
+#"Z7002226"
+d3 <- cohort_new[cohort_new$pat_id == "Z7002226",]
+#only the second admission contains the crisis period
+age_new2 <- c(age_new2,d3$"age (y)"[2])
+#"Z8089628"
+d5 <- cohort_new[cohort_new$pat_id == "Z8089628",]
+age_new2 <- c(age_new2,d5$"age (y)"[1])
+#"Z2656846"
+d6 <- cohort_new[cohort_new$pat_id == "Z2656846",]
+#only the first admission contains the crisis period
+age_new2 <- c(age_new2,d6$"age (y)"[1])
+#"Z8138823"
+d7 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+age_new2 <- c(age_new2,d7$"age (y)"[1])
+age_new <- c(age_new1,age_new2)
+format(mean(age_new),digits = 6)
+format(sd(age_new),digits = 6)
+```
+
+Gender
+```{r}
+#enroll for once
+gender_new1 <- cohort_new[cohort_new$pat_id %in% NR_id1,]$sex
+#enroll for several times
+#"Z8223957"
+gender_new2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission starts in the crisis period
+gender_new2 <- c(gender_new2,d1$sex[2])
+#"Z3338372"
+d2 <- cohort_new[cohort_new$pat_id == "Z3338372",]
+#only the second admission contains the crisis period
+gender_new2 <- c(gender_new2,d2$sex[2])
+#"Z7002226"
+d3 <- cohort_new[cohort_new$pat_id == "Z7002226",]
+#only the second admission contains the crisis period
+gender_new2 <- c(gender_new2,d3$sex[2])
+#"Z8089628"
+d5 <- cohort_new[cohort_new$pat_id == "Z8089628",]
+gender_new2 <- c(gender_new2,d5$sex[1])
+#"Z8138823"
+d7 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+gender_new2 <- c(gender_new2,d7$sex[1])
+gender_new <- c(gender_new1,gender_new2)
+t1 <- table(gender_new)
+t1
+t1/length(NR_id)
+```
+
+Race
+```{r}
+#enroll for once
+race_new1 <- cohort_new[cohort_new$pat_id %in% NR_id1,]$race_new
+#enroll for several times
+#"Z8223957"
+race_new2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission starts in the crisis period
+race_new2 <- c(race_new2,d1$race_new[2])
+#"Z3338372"
+d2 <- cohort_new[cohort_new$pat_id == "Z3338372",]
+#only the second admission contains the crisis period
+race_new2 <- c(race_new2,d2$race_new[2])
+#"Z7002226"
+d3 <- cohort_new[cohort_new$pat_id == "Z7002226",]
+#only the second admission contains the crisis period
+race_new2 <- c(race_new2,d3$race_new[2])
+#"Z8089628"
+d5 <- cohort_new[cohort_new$pat_id == "Z8089628",]
+race_new2 <- c(race_new2,d5$race_new[1])
+#"Z8138823"
+d7 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+race_new2 <- c(race_new2,d7$race_new[1])
+race_new <- c(race_new1,race_new2)
+t2 <- table(race_new)
+t2
+t2/length(NR_id)
+```
+
+Ethnicity
+```{r}
+#enroll for once
+eth_new1 <- cohort_new[cohort_new$pat_id %in% NR_id1,]$ethnicity_new
+#enroll for several times
+#"Z8223957"
+eth_new2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission starts in the crisis period
+eth_new2 <- c(eth_new2,d1$ethnicity_new[2])
+#"Z3338372"
+d2 <- cohort_new[cohort_new$pat_id == "Z3338372",]
+#only the second admission contains the crisis period
+eth_new2 <- c(eth_new2,d2$ethnicity_new[2])
+#"Z7002226"
+d3 <- cohort_new[cohort_new$pat_id == "Z7002226",]
+#only the second admission contains the crisis period
+eth_new2 <- c(eth_new2,d3$ethnicity_new[2])
+#"Z8089628"
+d5 <- cohort_new[cohort_new$pat_id == "Z8089628",]
+eth_new2 <- c(eth_new2,d5$ethnicity_new[1])
+#"Z8138823"
+d7 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+eth_new2 <- c(eth_new2,d7$ethnicity_new[1])
+eth_new <- c(eth_new1,eth_new2)
+t3 <- table(eth_new)
+t3
+t3/length(NR_id)
+```
+outcome - 04/12
+```{r}
+la_date = as.Date("2020-04-12")
+v_date <- seq(s_date,la_date,by = 1)
+NR_id <- NULL
+NY_id <- NULL
+NB_id <- NULL
+for(i in seq_along(v_date)){
+  sdf <- sofa2 %>% filter(date == v_date[i])
+  NR_id <- unique(c(NR_id,sdf[sdf$group == "Red" & sdf$intubated_day == 0,]$pat_id))
+  NY_id <- unique(c(NY_id,sdf[sdf$group == "Yellow" & sdf$intubated_day == 0,]$pat_id))
+  NB_id <- unique(c(NB_id,sdf[sdf$group == "Blue" & sdf$intubated_day == 0,]$pat_id))
+}
+#enroll for once
+NR_id1 <- NR_id[!NR_id %in% more2] 
+#enroll for several times
+NR_id2 <- NR_id[NR_id %in% more2]
+outcome_new1 <- as.character(rep(0,length(NR_id1)))
+for (i in seq_along(NR_id1)) {
+  outcome_new1[i] <- cohort_new[cohort_new$pat_id == NR_id1[i],]$"dead" 
+}
+outcome_new2 <- rep(0,length(NR_id2))
+#"Z8223957"
+outcome_new2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission starts in the crisis period
+outcome_new2 <- c(outcome_new2,d1$"dead"[2])
+#"Z3338372"
+d2 <- cohort_new[cohort_new$pat_id == "Z3338372",]
+#only the first admission contains the crisis period
+outcome_new2 <- c(outcome_new2,d2$"dead"[1])
+#"Z7002226"
+d3 <- cohort_new[cohort_new$pat_id == "Z7002226",]
+#only the second admission contains the crisis period
+outcome_new2 <- c(outcome_new2,d3$"dead"[2])
+#"Z8089628"
+d5 <- cohort_new[cohort_new$pat_id == "Z8089628",]
+outcome_new2 <- c(outcome_new2,d5$"dead"[1])
+#"Z2656846"
+d6 <- cohort_new[cohort_new$pat_id == "Z2656846",]
+#only the first admission contains the crisis period
+outcome_new2 <- c(outcome_new2,d6$"dead"[1])
+outcome_new <- c(outcome_new1, outcome_new2)
+t4 <- table(outcome_new)
+t4
+t4/length(NR_id)
+
+```
+
+
+
+
+outcome
+```{r}
+outcome_new1 <- as.character(rep(0,length(NR_id1)))
+for (i in seq_along(NR_id1)) {
+  outcome_new1[i] <- cohort_new[cohort_new$pat_id == NR_id1[i],]$"dead" 
+}
+outcome_new2 <- rep(0,length(NR_id2))
+#"Z8223957"
+outcome_new2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission starts in the crisis period
+outcome_new2 <- c(outcome_new2,d1$"dead"[2])
+#"Z3338372"
+d2 <- cohort_new[cohort_new$pat_id == "Z3338372",]
+#only the first admission contains the crisis period
+outcome_new2 <- c(outcome_new2,d2$"dead"[1])
+#"Z7002226"
+d3 <- cohort_new[cohort_new$pat_id == "Z7002226",]
+#only the second admission contains the crisis period
+outcome_new2 <- c(outcome_new2,d3$"dead"[2])
+#"Z8089628"
+d5 <- cohort_new[cohort_new$pat_id == "Z8089628",]
+outcome_new2 <- c(outcome_new2,d5$"dead"[1])
+#"Z8138823"
+d7 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+outcome_new2 <- c(outcome_new2,d7$"dead"[1])
+#"Z2656846"
+d6 <- cohort_new[cohort_new$pat_id == "Z2656846",]
+#only the first admission contains the crisis period
+outcome_new2 <- c(outcome_new2,d6$"dead"[1])
+outcome_new <- c(outcome_new1, outcome_new2)
+t4 <- table(outcome_new)
+t4
+t4/length(NR_id)
+
+```
+
+(1.1) new_red_live
+
+```{r}
+#enroll for once
+NR_id1 <- NR_id[!NR_id %in% more2] 
+#enroll for several times
+NR_id2 <- NR_id[NR_id %in% more2]
+
+
+
+
+outcome_new1 <- as.character(rep(0,length(NR_id1)))
+for (i in seq_along(NR_id1)) {
+  outcome_new1[i] <- cohort_new[cohort_new$pat_id == NR_id1[i],]$"dead" 
+}
+
+
+NR_live <- NR_id1[outcome_new1 == "alive"]
+NR_live <- c(NR_live,"Z8223957","Z3338372","Z7002226","Z8089628","Z8138823")
+```
+
+
+Age
+```{r}
+#enroll for once
+NR_live1 <- NR_live[!NR_live %in% more2] 
+#enroll for several times
+NR_live2 <- NR_live[NR_live %in% more2]
+
+
+
+#enroll for once
+age_new1 <- cohort_new[cohort_new$pat_id %in% NR_live1,]$"age (y)"
+#enroll for several times
+#"Z8223957"
+age_new2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission starts in the crisis period
+age_new2 <- c(age_new2,d1$"age (y)"[2])
+#"Z3338372"
+d2 <- cohort_new[cohort_new$pat_id == "Z3338372",]
+#only the first admission contains the crisis period
+age_new2 <- c(age_new2,d2$"age (y)"[1])
+#"Z7002226"
+d3 <- cohort_new[cohort_new$pat_id == "Z7002226",]
+#only the second admission contains the crisis period
+age_new2 <- c(age_new2,d3$"age (y)"[2])
+#"Z8089628"
+d5 <- cohort_new[cohort_new$pat_id == "Z8089628",]
+age_new2 <- c(age_new2,d5$"age (y)"[1])
+#"Z8138823"
+d7 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+age_new2 <- c(age_new2,d7$"age (y)"[1])
+age_new <- c(age_new1,age_new2)
+format(mean(age_new),digits = 6)
+format(sd(age_new),digits = 6)
+```
+
+Gender
+```{r}
+#enroll for once
+gender_new1 <- cohort_new[cohort_new$pat_id %in% NR_live1,]$sex
+#enroll for several times
+#"Z8223957"
+gender_new2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission starts in the crisis period
+gender_new2 <- c(gender_new2,d1$sex[2])
+#"Z3338372"
+d2 <- cohort_new[cohort_new$pat_id == "Z3338372",]
+#only the second admission contains the crisis period
+gender_new2 <- c(gender_new2,d2$sex[2])
+#"Z7002226"
+d3 <- cohort_new[cohort_new$pat_id == "Z7002226",]
+#only the second admission contains the crisis period
+gender_new2 <- c(gender_new2,d3$sex[2])
+#"Z8089628"
+d5 <- cohort_new[cohort_new$pat_id == "Z8089628",]
+gender_new2 <- c(gender_new2,d5$sex[1])
+#"Z8138823"
+d7 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+gender_new2 <- c(gender_new2,d7$sex[1])
+gender_new <- c(gender_new1,gender_new2)
+t1 <- table(gender_new)
+t1
+t1/length(NR_live)
+```
+
+Race
+```{r}
+#enroll for once
+race_new1 <- cohort_new[cohort_new$pat_id %in% NR_live1,]$race_new
+#enroll for several times
+#"Z8223957"
+race_new2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission starts in the crisis period
+race_new2 <- c(race_new2,d1$race_new[2])
+#"Z3338372"
+d2 <- cohort_new[cohort_new$pat_id == "Z3338372",]
+#only the second admission contains the crisis period
+race_new2 <- c(race_new2,d2$race_new[2])
+#"Z7002226"
+d3 <- cohort_new[cohort_new$pat_id == "Z7002226",]
+#only the second admission contains the crisis period
+race_new2 <- c(race_new2,d3$race_new[2])
+#"Z8089628"
+d5 <- cohort_new[cohort_new$pat_id == "Z8089628",]
+race_new2 <- c(race_new2,d5$race_new[1])
+#"Z8138823"
+d7 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+race_new2 <- c(race_new2,d7$race_new[1])
+race_new <- c(race_new1,race_new2)
+t2 <- table(race_new)
+t2
+t2/length(NR_live)
+```
+
+Ethnicity
+```{r}
+#enroll for once
+eth_new1 <- cohort_new[cohort_new$pat_id %in% NR_live1,]$ethnicity_new
+#enroll for several times
+#"Z8223957"
+eth_new2 <- NULL
+d1 <- cohort_new[cohort_new$pat_id == "Z8223957",]
+#only the second admission starts in the crisis period
+eth_new2 <- c(eth_new2,d1$ethnicity_new[2])
+#"Z3338372"
+d2 <- cohort_new[cohort_new$pat_id == "Z3338372",]
+#only the second admission contains the crisis period
+eth_new2 <- c(eth_new2,d2$ethnicity_new[2])
+#"Z7002226"
+d3 <- cohort_new[cohort_new$pat_id == "Z7002226",]
+#only the second admission contains the crisis period
+eth_new2 <- c(eth_new2,d3$ethnicity_new[2])
+#"Z8089628"
+d5 <- cohort_new[cohort_new$pat_id == "Z8089628",]
+eth_new2 <- c(eth_new2,d5$ethnicity_new[1])
+#"Z8138823"
+d7 <- cohort_new[cohort_new$pat_id == "Z8138823",]
+#only the first admission contains the crisis period
+eth_new2 <- c(eth_new2,d7$ethnicity_new[1])
+eth_new <- c(eth_new1,eth_new2)
+t3 <- table(eth_new)
+t3
+t3/length(NR_live)
+```
+
+
+(1.2) new_red_dead
+
+```{r}
+NR_dead <- NR_id1[outcome_new1 == "deceased"]
+NR_dead <- c(NR_dead,"Z2656846")
+```
+
+
+Age
+```{r}
+#enroll for once
+NR_dead1 <- NR_dead[!NR_dead %in% more2] 
+#enroll for several times
+NR_dead2 <- NR_dead[NR_dead %in% more2]
+
+#"Z2656846"
+d2 <- cohort_new[cohort_new$pat_id == "Z2656846",]
+age_new2 <- d2$"age (y)"[1]
+
+#enroll for once
+age_new <- c(cohort_new[cohort_new$pat_id %in% NR_dead1,]$"age (y)",age_new2)
+
+
+
+format(mean(age_new),digits = 6)
+format(sd(age_new),digits = 6)
+```
+
+Gender
+```{r}
+#enroll for once
+
+#"Z2656846"
+d2 <- cohort_new[cohort_new$pat_id == "Z2656846",]
+gender_new2 <- d2$sex[1]
+
+gender_new <- c(cohort_new[cohort_new$pat_id %in% NR_dead1,]$sex,gender_new2)
+t1 <- table(gender_new)
+t1
+t1/length(NR_dead)
+```
+
+Race
+```{r}
+#enroll for once
+#"Z2656846"
+d2 <- cohort_new[cohort_new$pat_id == "Z2656846",]
+race_new2 <- d2$race_new[1]
+
+race_new <- c(cohort_new[cohort_new$pat_id %in% NR_dead1,]$race_new,race_new2)
+t2 <- table(race_new)
+t2
+t2/length(NR_dead)
+```
+
+Ethnicity
+```{r}
+#"Z2656846"
+d2 <- cohort_new[cohort_new$pat_id == "Z2656846",]
+eth_new2 <- d2$ethnicity_new[1]
+
+#enroll for once
+eth_new <- c(cohort_new[cohort_new$pat_id %in% NR_dead1,]$ethnicity_new,eth_new2)
+t3 <- table(eth_new)
+t3
+t3/length(NR_dead)
+```
+
+
+
+
+(2) new_yellow (before allocation): the age, gender, race and ethnicity, whether they live in the real world
+
+```{r}
+#enroll for once
+NY_id1 <- NY_id[!NY_id %in% more2] 
+#enroll for several times
+NY_id2 <- NY_id[NY_id %in% more2] 
+NY_id2 #2
+```
+
+sofa score
+```{r}
+score_y <- NULL
+for (i in seq_along(v_date)) {
+  sdf <- sofa2 %>% filter(date == v_date[i])
+  score_y <- c(score_y,sdf[sdf$group == "Yellow" & sdf$intubated_day == 0,]$`SOFA Vtot`)
+}
+mean(score_y)
+sd(score_y)
+```
+
+
+Age
+```{r}
+age_new_y1 <- cohort_new[cohort_new$pat_id %in% NY_id,]$"age (y)"   
+#"Z2417059"
+d1 <- cohort_new[cohort_new$pat_id == "Z2417059",]
+#only the second admission contains the crisis period
+age_new_y2 <- d1$"age (y)"[2]
+#"Z1906509"
+d2 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the second admission contains the crisis period
+age_new_y2 <- c(age_new_y2,d2$"age (y)"[1])
+age_new_y <- c(age_new_y1, age_new_y2)
+mean(age_new_y)
+sd(age_new_y)
+```
+
+Gender
+```{r}
+gender_new_y1 <- cohort_new[cohort_new$pat_id %in% NY_id1,]$sex
+#"Z2417059"
+d1 <- cohort_new[cohort_new$pat_id == "Z2417059",]
+#only the second admission contains the crisis period
+gender_new_y2 <- d1$sex[2]
+#"Z1906509"
+d2 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the second admission contains the crisis period
+gender_new_y2 <- c(gender_new_y2,d2$sex[1])
+gender_new_y <- c(gender_new_y1, gender_new_y2)
+t1 <- table(gender_new_y)
+t1
+t1/length(NY_id)
+```
+
+Race
+```{r}
+race_new_y1 <- cohort_new[cohort_new$pat_id %in% NY_id1,]$race_new
+#"Z2417059"
+d1 <- cohort_new[cohort_new$pat_id == "Z2417059",]
+#only the second admission contains the crisis period
+race_new_y2 <- d1$race_new[2]
+#"Z1906509"
+d2 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the second admission contains the crisis period
+race_new_y2 <- c(race_new_y2,d2$race_new[1])
+race_new_y <- c(race_new_y1, race_new_y2)
+t2 <- table(race_new_y)
+t2
+t2/length(NY_id)
+```
+
+Ethnicity
+```{r}
+eth_new_y1 <- cohort_new[cohort_new$pat_id %in% NY_id1,]$ethnicity_new
+#"Z2417059"
+d1 <- cohort_new[cohort_new$pat_id == "Z2417059",]
+#only the second admission contains the crisis period
+eth_new_y2 <- d1$ethnicity_new[2]
+#"Z1906509"
+d2 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the second admission contains the crisis period
+eth_new_y2 <- c(eth_new_y2,d2$ethnicity_new[1])
+eth_new_y <- c(eth_new_y1, eth_new_y2)
+t3 <- table(eth_new_y)
+t3
+t3/length(NY_id)
+```
+outcome - 04/12
+```{r}
+la_date = as.Date("2020-04-12")
+v_date <- seq(s_date,la_date,by = 1)
+NR_id <- NULL
+NY_id <- NULL
+NB_id <- NULL
+for(i in seq_along(v_date)){
+  sdf <- sofa2 %>% filter(date == v_date[i])
+  NR_id <- unique(c(NR_id,sdf[sdf$group == "Red" & sdf$intubated_day == 0,]$pat_id))
+  NY_id <- unique(c(NY_id,sdf[sdf$group == "Yellow" & sdf$intubated_day == 0,]$pat_id))
+  NB_id <- unique(c(NB_id,sdf[sdf$group == "Blue" & sdf$intubated_day == 0,]$pat_id))
+}
+#enroll for once
+NY_id1 <- NY_id[!NY_id %in% more2] 
+#enroll for several times
+NY_id2 <- NY_id[NY_id %in% more2]
+outcome_new1 <- as.character(rep(0,length(NY_id1)))
+for (i in seq_along(NY_id1)) {
+  outcome_new1[i] <- cohort_new[cohort_new$pat_id == NY_id1[i],]$"dead" 
+}
+outcome_new2 <- rep(0,length(NY_id2))
+#"Z2417059"
+d1 <- cohort_new[cohort_new$pat_id == "Z2417059",]
+#only the second admission contains the crisis period
+outcome_new2 <- d1$"dead" [2]
+#"Z1906509"
+d2 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the second admission contains the crisis period
+outcome_new2 <- c(outcome_new2,d2$"dead" [1])
+outcome_new <- c(outcome_new1, outcome_new2)
+t4 <- table(outcome_new)
+t4
+t4/length(NY_id)
+
+```
+
+
+outcome
+```{r}
+outcome_new1 <- as.character(rep(0,length(NY_id1)))
+for (i in seq_along(NY_id1)) {
+  outcome_new1[i] <- cohort_new[cohort_new$pat_id == NY_id1[i],]$"dead" 
+}
+#"Z2417059"
+d1 <- cohort_new[cohort_new$pat_id == "Z2417059",]
+#only the second admission contains the crisis period
+outcome_new2 <- d1$"dead" [2]
+#"Z1906509"
+d2 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the second admission contains the crisis period
+outcome_new2 <- c(outcome_new2,d2$"dead" [1])
+outcome_new <- c(outcome_new1, outcome_new2)
+t4 <- table(outcome_new)
+t4
+t4/length(NY_id)
+
+```
+
+(2.1) new_yellow_live
+
+```{r}
+NY_live <- NY_id1[outcome_new1 == "alive"]
+NY_live <- c(NY_live,"Z1906509")
+```
+
+
+Age
+```{r}
+#enroll for once
+NY_live1 <- NY_live[!NY_live %in% more2] 
+#enroll for several times
+NY_live2 <- NY_live[NY_live %in% more2]
+
+
+
+#enroll for once
+age_new <- cohort_new[cohort_new$pat_id %in% NY_live1,]$"age (y)"
+#"Z1906509"
+d1 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the second admission contains the crisis period
+age_new_y2 <- d1$"age (y)"[2]
+age_new_y <- c(age_new_y1, age_new_y2)
+mean(age_new_y)
+sd(age_new_y)
+```
+
+Gender
+```{r}
+gender_new_y1 <- cohort_new[cohort_new$pat_id %in% NY_live1,]$sex
+#"Z1906509"
+d1 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the second admission contains the crisis period
+gender_new_y2 <- d1$sex[2]
+gender_new_y <- c(gender_new_y1, gender_new_y2)
+t1 <- table(gender_new_y)
+t1
+t1/length(NY_live)
+```
+
+Race
+```{r}
+race_new_y1 <- cohort_new[cohort_new$pat_id %in% NY_live1,]$race_new
+#"Z1906509"
+d1 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the second admission contains the crisis period
+race_new_y2 <- d1$race_new[2]
+race_new_y <- c(race_new_y1, race_new_y2)
+t2 <- table(race_new_y)
+t2
+t2/length(NY_live)
+```
+
+Ethnicity
+```{r}
+eth_new_y1 <- cohort_new[cohort_new$pat_id %in% NY_live1,]$ethnicity_new
+#"Z1906509"
+d1 <- cohort_new[cohort_new$pat_id == "Z1906509",]
+#only the second admission contains the crisis period
+eth_new_y2 <- d1$ethnicity_new[2]
+eth_new_y <- c(eth_new_y1, eth_new_y2)
+t3 <- table(eth_new_y)
+t3
+t3/length(NY_live)
+```
+
+(2.2) new_yellow_dead
+
+```{r}
+NY_dead <- NY_id1[outcome_new1 == "deceased"]
+NY_dead <- c(NY_dead,"Z2417059")
+```
+
+
+Age
+```{r}
+#enroll for once
+NY_dead1 <- NY_dead[!NY_dead %in% more2] 
+#enroll for several times
+NY_dead2 <- NY_dead[NY_dead %in% more2]
+
+
+
+
+#enroll for once
+age_new_y1 <- cohort_new[cohort_new$pat_id %in% NY_dead1,]$"age (y)"
+#"Z2417059"
+d1 <- cohort_new[cohort_new$pat_id == "Z2417059",]
+#only the second admission contains the crisis period
+age_new_y2 <- d1$"age (y)"[2]
+age_new_y <- c(age_new_y1, age_new_y2)
+mean(age_new_y)
+sd(age_new_y)
+```
+
+Gender
+```{r}
+gender_new_y1 <- cohort_new[cohort_new$pat_id %in% NY_dead1,]$sex
+#"Z2417059"
+d1 <- cohort_new[cohort_new$pat_id == "Z2417059",]
+#only the second admission contains the crisis period
+gender_new_y2 <- d1$sex[2]
+gender_new_y <- c(gender_new_y1, gender_new_y2)
+t1 <- table(gender_new_y)
+t1
+t1/length(NY_dead)
+```
+
+Race
+```{r}
+race_new_y1 <- cohort_new[cohort_new$pat_id %in% NY_dead1,]$race_new
+#"Z2417059"
+d1 <- cohort_new[cohort_new$pat_id == "Z2417059",]
+#only the second admission contains the crisis period
+race_new_y2 <- d1$race_new[2]
+race_new_y <- c(race_new_y1, race_new_y2)
+t2 <- table(race_new_y)
+t2
+t2/length(NY_dead1)
+```
+
+Ethnicity
+```{r}
+eth_new_y1 <- cohort_new[cohort_new$pat_id %in% NY_dead1,]$ethnicity_new
+#"Z2417059"
+d1 <- cohort_new[cohort_new$pat_id == "Z2417059",]
+#only the second admission contains the crisis period
+eth_new_y2 <- d1$ethnicity_new[2]
+eth_new_y <- c(eth_new_y1, eth_new_y2)
+t3 <- table(eth_new_y)
+t3
+t3/length(NY_dead)
+```
+
+
+
+(3) new_blue (before allocation): the age, gender, race and ethnicity, whether they live in the real world
+
+```{r}
+#enroll for once
+NB_id1 <- NB_id[!NB_id %in% more2] 
+#enroll for several times
+NB_id2 <- NB_id[NB_id %in% more2] 
+NB_id2
+#no one has ever enrolled for several times
+```
+
+sofa score
+```{r}
+score_bl <- NULL
+for (i in seq_along(v_date)) {
+  sdf <- sofa2 %>% filter(date == v_date[i])
+  score_bl <- c(score_bl,sdf[sdf$group == "Blue" & sdf$intubated_day == 0,]$`SOFA Vtot`)
+}
+mean(score_bl)
+sd(score_bl)
+```
+
+mean is 13.34694, sd is 1.56193
+
+Age
+```{r}
+age_new_b <- cohort_new[cohort_new$pat_id %in% NB_id,]$"age (y)"
+mean(age_new_b)
+sd(age_new_b)
+```
+
+Gender
+```{r}
+gender_new_b <- cohort_new[cohort_new$pat_id %in% NB_id,]$sex
+t1 <- table(gender_new_b)
+t1
+t1/length(NB_id)
+```
+
+Race
+```{r}
+race_new_b <- cohort_new[cohort_new$pat_id %in% NB_id,]$race_new
+t2 <- table(race_new_b)
+t2
+t2/length(NB_id)
+```
+
+Ethnicity
+```{r}
+eth_new_b <- cohort_new[cohort_new$pat_id %in% NB_id,]$ethnicity_new
+t3 <- table(eth_new_b)
+t3
+t3/length(NB_id)
+```
+
+outcome
+```{r}
+outcome_new_b <- as.character(rep(0,length(NB_id)))
+for (i in seq_along(NB_id)) {
+  outcome_new_b[i] <- cohort_new[cohort_new$pat_id == NB_id[i],]$"dead"
+}
+t4 <- table(outcome_new_b)
+t4
+t4/length(NB_id)
+```
+
+(3.1) new_blue_live
+
+```{r}
+NB_live <- NB_id[outcome_new_b == "alive"]
+```
+
+
+Age
+```{r}
+#enroll for once
+NB_live1 <- NB_live[!NB_live %in% more2] 
+#enroll for several times
+NB_live2 <- NB_live[NB_live %in% more2]
+
+
+
+
+#enroll for once
+age_new <- cohort_new[cohort_new$pat_id %in% NB_live1,]$"age (y)"
+mean(age_new)
+sd(age_new)
+```
+
+Gender
+```{r}
+gender_new_b <- cohort_new[cohort_new$pat_id %in% NB_live,]$sex
+t1 <- table(gender_new_b)
+t1
+t1/length(NB_live)
+```
+
+Race
+```{r}
+race_new_b <- cohort_new[cohort_new$pat_id %in% NB_live,]$race_new
+t2 <- table(race_new_b)
+t2
+t2/length(NB_live)
+```
+
+Ethnicity
+```{r}
+eth_new_b <- cohort_new[cohort_new$pat_id %in% NB_live,]$ethnicity_new
+t3 <- table(eth_new_b)
+t3
+t3/length(NB_live)
+```
+
+
+(3.2) new_blue_dead
+
+```{r}
+NB_dead <- NB_id[outcome_new_b == "deceased"]
+```
+
+
+Age
+```{r}
+#enroll for once
+NB_dead1 <- NB_dead[!NB_dead %in% more2] 
+#enroll for several times
+NB_dead2 <- NB_dead[NB_dead %in% more2]
+
+
+
+
+#enroll for once
+age_new <- cohort_new[cohort_new$pat_id %in% NB_dead,]$"age (y)"
+mean(age_new)
+sd(age_new)
+```
+
+Gender
+```{r}
+gender_new_b <- cohort_new[cohort_new$pat_id %in% NB_dead,]$sex
+t1 <- table(gender_new_b)
+t1
+t1/length(NB_dead)
+```
+
+Race
+```{r}
+race_new_b <- cohort_new[cohort_new$pat_id %in% NB_dead,]$race_new
+t2 <- table(race_new_b)
+t2
+t2/length(NB_dead)
+```
+
+Ethnicity
+```{r}
+eth_new_b <- cohort_new[cohort_new$pat_id %in% NB_dead,]$ethnicity_new
+t3 <- table(eth_new_b)
+t3
+t3/length(NB_dead)
+```
+
+(4) exclusion group
+
+```{r}
+e_id <- cohort_new[cohort_new$pat_enc_csn_id %in% c(787668565,788566195),]$pat_id
+```
+
+Age
+```{r}
+#enroll for once
+age_e <- cohort_new[cohort_new$pat_id %in% e_id,]$"age (y)"
+mean(age_e,na.rm = T) 
+```
+
+Gender
+```{r}
+gender_e <- cohort_new[cohort_new$pat_id %in% e_id,]$sex
+t1 <- table(gender_e)
+t1
+t1/length(gender_e)
+```
+
+Race
+```{r}
+race_e <- cohort_new[cohort_new$pat_id %in% e_id,]$race_new
+t2 <- table(race_e)
+t2
+```
+
+Ethnicity
+```{r}
+eth_e <- cohort_new[cohort_new$pat_id %in% e_id,]$ethnicity_new
+t3 <- table(eth_e)
+t3
+```
+
+outcome
+```{r}
+outcome_e <- cohort_new[cohort_new$pat_enc_csn_id == 787668565,]$dead
+outcome_e <- c(outcome_e,cohort_new[cohort_new$pat_enc_csn_id == 788566195,]$dead)
+t4 <- table(outcome_e)
+t4
+```
+
+
+(5) comparison between Red and Yellow group
+
+Age
+```{r}
+t.test(age_new_y,age_new)
+```
+
+Gender
+```{r}
+m1 <- matrix(c(89,155,43,118), ncol = 2)
+rownames(m1) <- c("Female","Male")
+colnames(m1) <- c("red","yellow")
+chisq.test(m1)
+```
+
+Race
+```{r}
+m1 <- matrix(c(105,139,63,98), ncol = 2)
+rownames(m1) <- c("white","other")
+colnames(m1) <- c("red","yellow")
+chisq.test(m1)
+```
+
+Ethnicity
+```{r}
+m2 <- matrix(c(68,176,40,121), ncol = 2)
+rownames(m2) <- c("Hispanic","other")
+colnames(m2) <- c("red","yellow")
+chisq.test(m2)
+```
+
+
+outcome
+```{r}
+m3 <- matrix(c(97,147,50,111), ncol = 2)
+rownames(m3) <- c("alive","deceased")
+colnames(m3) <- c("red","yellow")
+chisq.test(m3)
+```
+
+(6) Comparison between Yellow and Blue group
+
+Age
+```{r}
+t.test(age_new_y,age_new_b)
+```
+
+Gender
+```{r}
+m1 <- matrix(c(40,121,16,33), ncol = 2)
+rownames(m1) <- c("Female","Male")
+colnames(m1) <- c("yellow","blue")
+chisq.test(m1)
+```
+
+race
+```{r}
+m7 <- matrix(c(63,98,19,30), ncol = 2)
+rownames(m7) <- c("white","other")
+colnames(m7) <- c("yellow","blue")
+chisq.test(m7)
+```
+
+ethnicity
+```{r}
+m8 <- matrix(c(40,121,16,33), ncol = 2)
+rownames(m8) <- c("Hispanic","other")
+colnames(m8) <- c("yellow","blue")
+chisq.test(m8)
+```
+
+outcome
+```{r}
+m9 <- matrix(c(50,111,11,38), ncol = 2)
+rownames(m9) <- c("alive","deceased")
+colnames(m9) <- c("yellow","blue")
+chisq.test(m9)
+```
+
+(7) Comparison between Red and Blue group
+
+Age
+```{r}
+t.test(age_new_b,age_new)
+```
+
+Gender
+```{r}
+m1 <- matrix(c(89,155,18,31), ncol = 2)
+rownames(m1) <- c("Female","Male")
+colnames(m1) <- c("red","blue")
+chisq.test(m1)
+```
+
+Race
+```{r}
+m4 <- matrix(c(105,139,19,30), ncol = 2)
+rownames(m4) <- c("white","other")
+colnames(m4) <- c("red","blue")
+chisq.test(m4)
+fisher.test(m4)
+```
+
+Ethnicity
+```{r}
+m5 <- matrix(c(68,176,16,33), ncol = 2)
+rownames(m5) <- c("Hispanic","other")
+colnames(m5) <- c("red","blue")
+chisq.test(m5)
+```
+
+Outcome
+```{r}
+m6 <- matrix(c(97,147,11,38), ncol = 2)
+rownames(m6) <- c("alive","deceased")
+colnames(m6) <- c("red","blue")
+chisq.test(m6)
+```
+
+(8) groupa
+
+for each simulation
+```{r}
+t <- total == 15
+f3_all_15 <- f3_all[t]
+length <- rep(0,length(f3_all_15))
+for(j in seq_along(f3_all_15)){
+  length[j] <- nrow(f3_all_15[[j]])
+}
+sd(length)
+
+mean_groupa <- rep(0,length(f3_all_15))
+sd_groupa <- rep(0,length(f3_all_15))
+gender_percent_groupa <- 0
+gender_number_groupa <- 0
+race_percent_groupa <- NULL
+race_number_groupa <- NULL
+ethnicity_percent_groupa <- NULL
+ethnicity_number_groupa <- NULL
+outcome_percent_groupa <- NULL
+outcome_number_groupa <- NULL
+for (j in seq_along(f3_all_15)) {
+cat("seed = ", j, "\n")
+groupa_15 <- f3_all_15[[j]]$pat_enc_csn_id
+groupa_15_id <- f3_all_15[[j]]$pat_id
+#AGE
+age_groupa <- rep(0,length(groupa_15))
+for (i in 1:length(groupa_15)) {
+age_groupa[i] <- max(cohort_new[cohort_new$pat_id %in% groupa_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"age (y)")
+}
+mean_groupa[j] <- mean(age_groupa,na.rm = T)
+sd_groupa[j] <- sd(age_groupa,na.rm = T) 
+#GENDER
+gender_groupa <- rep(0,length(groupa_15))
+for (i in 1:length(groupa_15)) {
+ gender_groupa[i] <- unique(cohort_new[cohort_new$pat_id %in% groupa_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$sex)
+}
+t1 <- table(gender_groupa)
+gender_percent_groupa <- t1/length(groupa_15) + gender_percent_groupa
+gender_number_groupa <- t1 + gender_number_groupa
+#RACE
+race_groupa <- rep(0,length(groupa_15))
+for (i in 1:length(groupa_15)) {
+ race_groupa[i] <- unique(cohort_new[cohort_new$pat_id %in% groupa_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$race_new)
+}
+t2 <- table(race_groupa)
+race_percent_groupa[[j]] <- t2/length(groupa_15)
+race_number_groupa[[j]] <- t2
+#ETHNICITY
+eth_groupa <- rep(0,length(groupa_15))
+for (i in 1:length(groupa_15)) {
+ eth_groupa[i] <- unique(cohort_new[cohort_new$pat_id %in% groupa_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$ethnicity_new)
+}
+t3 <- table(eth_groupa)
+ethnicity_percent_groupa[[j]] <- t3/length(groupa_15)
+ethnicity_number_groupa[[j]] <- t3
+#OUTCOME
+middle <- NULL
+outcome_groupa <- as.character(rep(0,length(groupa_15_id)))
+for (i in seq_along(groupa_15)) {
+  middle[[i]] <- cohort_new[cohort_new$pat_id %in% groupa_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"dead"
+  if(sum(middle[[i]] %in% "deceased") > 0){
+    outcome_groupa[i] <- "deceased" 
+  } else {
+    outcome_groupa[i] <- "alive" 
+  }
+}
+t4 <- table(outcome_groupa)
+outcome_percent_groupa[[j]] <- t4/length(groupa_15_id)
+outcome_number_groupa[[j]] <- t4
+}
+
+```
+
+sofa score
+```{r}
+score_bl <- NULL
+for (i in seq_along(f3_all_15)) {
+  score_bl[[i]] <- f3_all_15[[i]]$`SOFA Vtot`
+}
+summary(sapply(score_bl, mean))
+```
+
+the day - group a
+```{r}
+day_bl <- NULL
+for (i in seq_along(f3_all_15)) {
+  day_bl[[i]] <- f3_all_15[[i]]$intubated_day
+}
+summary(sapply(day_bl, mean))
+```
+
+
+
+age
+```{r}
+mean(mean_groupa) #mean
+mean(sd_groupa) #sd
+```
+gender
+```{r}
+gender_number_groupa/length(f3_all_15)
+gender_percent_groupa/length(f3_all_15)
+```
+
+race
+```{r}
+race_percent <- rep(0,5)
+race_number <- rep(0,5)
+names(race_percent) <- names(race_number) <- c("African American","Asian","Unknown","White","Native American")
+for (j in seq_along(race_percent_groupa)) {
+race_percent["African American"] <- race_percent["African American"] + race_percent_groupa[[j]]["African American"]
+race_percent["Asian"] <- race_percent["Asian"] + race_percent_groupa[[j]]["Asian"]
+race_percent["Unknown"] <- race_percent["Unknown"] + race_percent_groupa[[j]]["Unknown"]
+race_percent["White"] <- race_percent["White"] + race_percent_groupa[[j]]["White"]
+if(!is.na(race_percent_groupa[[j]]["Native American"])){
+race_percent["Native American"] <- race_percent["Native American"] + race_percent_groupa[[j]]["Native American"]
+}
+race_number["African American"] <- race_number["African American"] + race_number_groupa[[j]]["African American"]
+race_number["Asian"] <- race_number["Asian"] + race_number_groupa[[j]]["Asian"]
+race_number["Unknown"] <- race_number["Unknown"] + race_number_groupa[[j]]["Unknown"]
+race_number["White"] <- race_number["White"] + race_number_groupa[[j]]["White"]
+if(!is.na(race_number_groupa[[j]]["Native American"])){
+race_number["Native American"] <- race_number["Native American"] + race_number_groupa[[j]]["Native American"]
+}
+}
+race_number/length(f3_all_15)
+race_percent/length(f3_all_15)
+```
+
+ethnicity
+```{r}
+ethnicity_percent <- rep(0,3)
+ethnicity_number <- rep(0,3)
+names(ethnicity_percent) <- names(ethnicity_number) <- c("Hispanic","Not Hispanic","Unknown")
+for (j in seq_along(ethnicity_percent_groupa)) {
+ethnicity_percent["Hispanic"] <- ethnicity_percent["Hispanic"] + ethnicity_percent_groupa[[j]]["Hispanic"]
+ethnicity_percent["Not Hispanic"] <- ethnicity_percent["Not Hispanic"] + ethnicity_percent_groupa[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_percent_groupa[[j]]["Unknown"])){
+ethnicity_percent["Unknown"] <- ethnicity_percent["Unknown"] + ethnicity_percent_groupa[[j]]["Unknown"]
+}
+
+ethnicity_number["Hispanic"] <- ethnicity_number["Hispanic"] + ethnicity_number_groupa[[j]]["Hispanic"]
+ethnicity_number["Not Hispanic"] <- ethnicity_number["Not Hispanic"] + ethnicity_number_groupa[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_number_groupa[[j]]["Unknown"])){
+ethnicity_number["Unknown"] <- ethnicity_number["Unknown"] + ethnicity_number_groupa[[j]]["Unknown"]
+}
+}
+ethnicity_number/length(f3_all_15)
+ethnicity_percent/length(f3_all_15)
+```
+
+outcome
+```{r}
+outcome_percent <- rep(0,2)
+outcome_number <- rep(0,2)
+names(outcome_percent) <- names(outcome_number) <- c("alive","deceased")
+for (j in seq_along(ethnicity_percent_groupa)) {
+outcome_percent["alive"] <- outcome_percent["alive"] + outcome_percent_groupa[[j]]["alive"]
+outcome_percent["deceased"] <- outcome_percent["deceased"] + outcome_percent_groupa[[j]]["deceased"]
+
+outcome_number["alive"] <- outcome_number["alive"] + outcome_number_groupa[[j]]["alive"]
+outcome_number["deceased"] <- outcome_number["deceased"] + outcome_number_groupa[[j]]["deceased"]
+}
+outcome_percent/length(f3_all_15)
+outcome_number/length(f3_all_15)
+nnnn <- rep(0,length(ethnicity_percent_groupa))
+for (j in seq_along(ethnicity_percent_groupa)) {
+ nnnn[j] <- outcome_percent_groupa[[j]][["alive"]]
+}
+sd(nnnn)
+```
+
+(8.1) groupa_live
+
+```{r}
+t <- total == 15
+f3_all_15 <- f3_all[t]
+mean_groupa <- rep(0,length(f3_all_15))
+sd_groupa <- rep(0,length(f3_all_15))
+gender_percent_groupa <- 0
+gender_number_groupa <- 0
+race_percent_groupa <- NULL
+race_number_groupa <- NULL
+ethnicity_percent_groupa <- NULL
+ethnicity_number_groupa <- NULL
+outcome_percent_groupa <- NULL
+outcome_number_groupa <- NULL
+for (j in seq_along(f3_all_15)) {
+groupa_15 <- f3_all_15[[j]]$pat_enc_csn_id
+groupa_15_id <- f3_all_15[[j]]$pat_id
+
+#OUTCOME
+middle <- NULL
+outcome_groupa <- as.character(rep(0,length(groupa_15_id)))
+for (i in seq_along(groupa_15)) {
+  middle[[i]] <- cohort_new[cohort_new$pat_id %in% groupa_15_id[i] & cohort_new$intubation_date< "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"dead"
+  if(sum(middle[[i]] %in% "deceased") > 0){
+    outcome_groupa[i] <- "deceased" 
+  } else {
+    outcome_groupa[i] <- "alive" 
+  }
+}
+
+groupa_15_id_live <- groupa_15_id[outcome_groupa == "alive"]
+
+#AGE
+age_groupa <- rep(0,length(groupa_15_id_live))
+for (i in 1:length(groupa_15_id_live)) {
+age_groupa[i] <- max(cohort_new[cohort_new$pat_id %in% groupa_15_id_live[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"age (y)")
+}
+mean_groupa[j] <- mean(age_groupa,na.rm = T)
+sd_groupa[j] <- sd(age_groupa,na.rm = T) 
+#GENDER
+gender_groupa <- rep(0,length(groupa_15_id_live))
+for (i in 1:length(groupa_15_id_live)) {
+ gender_groupa[i] <- unique(cohort_new[cohort_new$pat_id %in% groupa_15_id_live[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$sex)
+}
+t1 <- table(gender_groupa)
+gender_percent_groupa <- t1/length(groupa_15_id_live) + gender_percent_groupa
+gender_number_groupa <- t1 + gender_number_groupa
+#RACE
+race_groupa <- rep(0,length(groupa_15_id_live))
+for (i in 1:length(groupa_15_id_live)) {
+ race_groupa[i] <- unique(cohort_new[cohort_new$pat_id %in% groupa_15_id_live[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$race_new)
+}
+t2 <- table(race_groupa)
+race_percent_groupa[[j]] <- t2/length(groupa_15_id_live)
+race_number_groupa[[j]] <- t2
+#ETHNICITY
+eth_groupa <- rep(0,length(groupa_15_id_live))
+for (i in 1:length(groupa_15_id_live)) {
+ eth_groupa[i] <- unique(cohort_new[cohort_new$pat_id %in% groupa_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$ethnicity_new)
+}
+t3 <- table(eth_groupa)
+ethnicity_percent_groupa[[j]] <- t3/length(groupa_15_id_live)
+ethnicity_number_groupa[[j]] <- t3
+}
+
+```
+
+age
+```{r}
+mean(mean_groupa) #mean
+mean(sd_groupa) #sd
+```
+gender
+```{r}
+gender_number_groupa/length(f3_all_15)
+gender_percent_groupa/length(f3_all_15)
+```
+
+race
+```{r}
+race_percent <- rep(0,5)
+race_number <- rep(0,5)
+names(race_percent) <- names(race_number) <- c("African American","Asian","Unknown","White","Native American")
+for (j in seq_along(race_percent_groupa)) {
+race_percent["African American"] <- race_percent["African American"] + race_percent_groupa[[j]]["African American"]
+race_percent["Asian"] <- race_percent["Asian"] + race_percent_groupa[[j]]["Asian"]
+race_percent["Unknown"] <- race_percent["Unknown"] + race_percent_groupa[[j]]["Unknown"]
+race_percent["White"] <- race_percent["White"] + race_percent_groupa[[j]]["White"]
+if(!is.na(race_percent_groupa[[j]]["Native American"])){
+race_percent["Native American"] <- race_percent["Native American"] + race_percent_groupa[[j]]["Native American"]
+}
+race_number["African American"] <- race_number["African American"] + race_number_groupa[[j]]["African American"]
+race_number["Asian"] <- race_number["Asian"] + race_number_groupa[[j]]["Asian"]
+race_number["Unknown"] <- race_number["Unknown"] + race_number_groupa[[j]]["Unknown"]
+race_number["White"] <- race_number["White"] + race_number_groupa[[j]]["White"]
+if(!is.na(race_number_groupa[[j]]["Native American"])){
+race_number["Native American"] <- race_number["Native American"] + race_number_groupa[[j]]["Native American"]
+}
+}
+race_number/length(f3_all_15)
+race_percent/length(f3_all_15)
+```
+
+ethnicity
+```{r}
+ethnicity_percent <- rep(0,3)
+ethnicity_number <- rep(0,3)
+names(ethnicity_percent) <- names(ethnicity_number) <- c("Hispanic","Not Hispanic","Unknown")
+for (j in seq_along(ethnicity_percent_groupa)) {
+ethnicity_percent["Hispanic"] <- ethnicity_percent["Hispanic"] + ethnicity_percent_groupa[[j]]["Hispanic"]
+ethnicity_percent["Not Hispanic"] <- ethnicity_percent["Not Hispanic"] + ethnicity_percent_groupa[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_percent_groupa[[j]]["Unknown"])){
+ethnicity_percent["Unknown"] <- ethnicity_percent["Unknown"] + ethnicity_percent_groupa[[j]]["Unknown"]
+}
+
+ethnicity_number["Hispanic"] <- ethnicity_number["Hispanic"] + ethnicity_number_groupa[[j]]["Hispanic"]
+ethnicity_number["Not Hispanic"] <- ethnicity_number["Not Hispanic"] + ethnicity_number_groupa[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_number_groupa[[j]]["Unknown"])){
+ethnicity_number["Unknown"] <- ethnicity_number["Unknown"] + ethnicity_number_groupa[[j]]["Unknown"]
+}
+}
+ethnicity_number/length(f3_all_15)
+ethnicity_percent/length(f3_all_15)
+```
+
+
+(8.2) groupa_dead
+
+```{r}
+t <- total == 15
+f3_all_15 <- f3_all[t]
+mean_groupa <- rep(0,length(f3_all_15))
+sd_groupa <- rep(0,length(f3_all_15))
+gender_percent_groupa <- 0
+gender_number_groupa <- 0
+race_percent_groupa <- NULL
+race_number_groupa <- NULL
+ethnicity_percent_groupa <- NULL
+ethnicity_number_groupa <- NULL
+outcome_percent_groupa <- NULL
+outcome_number_groupa <- NULL
+for (j in seq_along(f3_all_15)) {
+  cat("seed = ",j, "\n")
+groupa_15 <- f3_all_15[[j]]$pat_enc_csn_id
+groupa_15_id <- f3_all_15[[j]]$pat_id
+
+#OUTCOME
+middle <- NULL
+outcome_groupa <- as.character(rep(0,length(groupa_15_id)))
+for (i in seq_along(groupa_15)) {
+   
+  middle[[i]] <- cohort_new[cohort_new$pat_id %in% groupa_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"dead"
+  if(sum(middle[[i]] %in% "deceased") > 0){
+    outcome_groupa[i] <- "deceased" 
+  } else {
+    outcome_groupa[i] <- "alive" 
+  }
+}
+
+groupa_15_id_dead <- groupa_15_id[outcome_groupa == "deceased"]
+
+#AGE
+age_groupa <- rep(0,length(groupa_15_id_dead))
+for (i in 1:length(groupa_15_id_dead)) {
+age_groupa[i] <- max(cohort_new[cohort_new$pat_id %in% groupa_15_id_dead[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"age (y)")
+}
+mean_groupa[j] <- mean(age_groupa,na.rm = T)
+sd_groupa[j] <- sd(age_groupa,na.rm = T) 
+#GENDER
+gender_groupa <- rep(0,length(groupa_15_id_dead))
+for (i in 1:length(groupa_15_id_dead)) {
+ gender_groupa[i] <- unique(cohort_new[cohort_new$pat_id %in% groupa_15_id_dead[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$sex)
+}
+t1 <- table(gender_groupa)
+gender_percent_groupa <- t1/length(groupa_15_id_dead) + gender_percent_groupa
+gender_number_groupa <- t1 + gender_number_groupa
+#RACE
+race_groupa <- rep(0,length(groupa_15_id_dead))
+for (i in 1:length(groupa_15_id_dead)) {
+ race_groupa[i] <- unique(cohort_new[cohort_new$pat_id %in% groupa_15_id_dead[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$race_new)
+}
+t2 <- table(race_groupa)
+race_percent_groupa[[j]] <- t2/length(groupa_15_id_dead)
+race_number_groupa[[j]] <- t2
+#ETHNICITY
+eth_groupa <- rep(0,length(groupa_15_id_dead))
+for (i in 1:length(groupa_15_id_dead)) {
+ eth_groupa[i] <- unique(cohort_new[cohort_new$pat_id %in% groupa_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$ethnicity_new)
+}
+t3 <- table(eth_groupa)
+ethnicity_percent_groupa[[j]] <- t3/length(groupa_15_id_dead)
+ethnicity_number_groupa[[j]] <- t3
+}
+
+```
+
+age
+```{r}
+mean(mean_groupa) #mean
+mean(sd_groupa) #sd
+```
+gender
+```{r}
+gender_number_groupa/length(f3_all_15)
+gender_percent_groupa/length(f3_all_15)
+```
+
+race
+```{r}
+race_percent <- rep(0,5)
+race_number <- rep(0,5)
+names(race_percent) <- names(race_number) <- c("African American","Asian","Unknown","White","Native American")
+for (j in seq_along(race_percent_groupa)) {
+race_percent["African American"] <- race_percent["African American"] + race_percent_groupa[[j]]["African American"]
+race_percent["Asian"] <- race_percent["Asian"] + race_percent_groupa[[j]]["Asian"]
+race_percent["Unknown"] <- race_percent["Unknown"] + race_percent_groupa[[j]]["Unknown"]
+race_percent["White"] <- race_percent["White"] + race_percent_groupa[[j]]["White"]
+if(!is.na(race_percent_groupa[[j]]["Native American"])){
+race_percent["Native American"] <- race_percent["Native American"] + race_percent_groupa[[j]]["Native American"]
+}
+race_number["African American"] <- race_number["African American"] + race_number_groupa[[j]]["African American"]
+race_number["Asian"] <- race_number["Asian"] + race_number_groupa[[j]]["Asian"]
+race_number["Unknown"] <- race_number["Unknown"] + race_number_groupa[[j]]["Unknown"]
+race_number["White"] <- race_number["White"] + race_number_groupa[[j]]["White"]
+if(!is.na(race_number_groupa[[j]]["Native American"])){
+race_number["Native American"] <- race_number["Native American"] + race_number_groupa[[j]]["Native American"]
+}
+}
+race_number/length(f3_all_15)
+race_percent/length(f3_all_15)
+```
+
+ethnicity
+```{r}
+ethnicity_percent <- rep(0,3)
+ethnicity_number <- rep(0,3)
+names(ethnicity_percent) <- names(ethnicity_number) <- c("Hispanic","Not Hispanic","Unknown")
+for (j in seq_along(ethnicity_percent_groupa)) {
+ethnicity_percent["Hispanic"] <- ethnicity_percent["Hispanic"] + ethnicity_percent_groupa[[j]]["Hispanic"]
+ethnicity_percent["Not Hispanic"] <- ethnicity_percent["Not Hispanic"] + ethnicity_percent_groupa[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_percent_groupa[[j]]["Unknown"])){
+ethnicity_percent["Unknown"] <- ethnicity_percent["Unknown"] + ethnicity_percent_groupa[[j]]["Unknown"]
+}
+
+ethnicity_number["Hispanic"] <- ethnicity_number["Hispanic"] + ethnicity_number_groupa[[j]]["Hispanic"]
+ethnicity_number["Not Hispanic"] <- ethnicity_number["Not Hispanic"] + ethnicity_number_groupa[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_number_groupa[[j]]["Unknown"])){
+ethnicity_number["Unknown"] <- ethnicity_number["Unknown"] + ethnicity_number_groupa[[j]]["Unknown"]
+}
+}
+ethnicity_number/length(f3_all_15)
+ethnicity_percent/length(f3_all_15)
+```
+
+
+
+(9) groupb
+
+for each simulation
+```{r}
+t <- total == 15
+f4_all_15 <- f4_all[t]
+mean_groupb <- rep(0,length(f4_all_15))
+sd_groupb <- rep(0,length(f4_all_15))
+gender_percent_groupb <- 0
+gender_number_groupb <- 0
+race_percent_groupb <- NULL
+race_number_groupb <- NULL
+ethnicity_percent_groupb <- NULL
+ethnicity_number_groupb <- NULL
+outcome_percent_groupb <- NULL
+outcome_number_groupb <- NULL
+for (j in seq_along(f4_all_15)) {
+  cat("i = ", j, "\n")
+groupb_15 <- f4_all_15[[j]]$pat_enc_csn_id
+groupb_15_id <- f4_all_15[[j]]$pat_id
+#AGE
+age_groupb <- rep(0,length(groupb_15))
+for (i in 1:length(groupb_15)) {
+age_groupb[i] <- max(cohort_new[cohort_new$pat_id %in% groupb_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"age (y)")
+}
+mean_groupb[j] <- mean(age_groupb,na.rm = T)
+sd_groupb[j] <- sd(age_groupb,na.rm = T) 
+#GENDER
+gender_groupb <- rep(0,length(groupb_15))
+for (i in 1:length(groupb_15)) {
+ gender_groupb[i] <- unique(cohort_new[cohort_new$pat_id %in% groupb_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$sex)
+}
+t1 <- table(gender_groupb)
+gender_percent_groupb <- t1/length(groupb_15) + gender_percent_groupb
+gender_number_groupb <- t1 + gender_number_groupb
+#RACE
+race_groupb <- rep(0,length(groupb_15))
+for (i in 1:length(groupb_15)) {
+ race_groupb[i] <- unique(cohort_new[cohort_new$pat_id %in% groupb_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$race_new)
+}
+t2 <- table(race_groupb)
+race_percent_groupb[[j]] <- t2/length(groupb_15)
+race_number_groupb[[j]] <- t2
+#ETHNICITY
+eth_groupb <- rep(0,length(groupb_15))
+for (i in 1:length(groupb_15)) {
+ eth_groupb[i] <- unique(cohort_new[cohort_new$pat_id %in% groupb_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$ethnicity_new)
+}
+t3 <- table(eth_groupb)
+ethnicity_percent_groupb[[j]] <- t3/length(groupb_15)
+ethnicity_number_groupb[[j]] <- t3
+#OUTCOME
+middle <- NULL
+outcome_groupb <- as.character(rep(0,length(groupb_15_id)))
+for (i in seq_along(groupb_15)) {
+  middle[[i]] <- cohort_new[cohort_new$pat_id %in% groupb_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"dead"
+  if(sum(middle[[i]] %in% "deceased") > 0){
+    outcome_groupb[i] <- "deceased" 
+  } else {
+    outcome_groupb[i] <- "alive" 
+  }
+}
+t4 <- table(outcome_groupb)
+outcome_percent_groupb[[j]] <- t4/length(groupb_15_id)
+outcome_number_groupb[[j]] <- t4
+}
+
+
+```
+
+sofa score
+```{r}
+score_bl <- NULL
+for (i in seq_along(f4_all_15)) {
+  score_bl[[i]] <- f4_all_15[[i]]$`SOFA Vtot`
+}
+summary(sapply(score_bl, mean))
+```
+
+
+
+age
+```{r}
+mean(mean_groupb) #mean
+mean(sd_groupb) #sd
+```
+gender
+```{r}
+gender_number_groupb/length(f4_all_15)
+gender_percent_groupb/length(f4_all_15)
+```
+
+race
+```{r}
+race_percent <- rep(0,5)
+race_number <- rep(0,5)
+names(race_percent) <- names(race_number) <- c("African American","Asian","Unknown","White","Native American")
+for (j in seq_along(race_percent_groupb)) {
+race_percent["African American"] <- race_percent["African American"] + race_percent_groupb[[j]]["African American"]
+race_percent["Asian"] <- race_percent["Asian"] + race_percent_groupb[[j]]["Asian"]
+race_percent["Unknown"] <- race_percent["Unknown"] + race_percent_groupb[[j]]["Unknown"]
+race_percent["White"] <- race_percent["White"] + race_percent_groupb[[j]]["White"]
+if(!is.na(race_percent_groupb[[j]]["Native American"])){
+race_percent["Native American"] <- race_percent["Native American"] + race_percent_groupb[[j]]["Native American"]
+}
+race_number["African American"] <- race_number["African American"] + race_number_groupb[[j]]["African American"]
+race_number["Asian"] <- race_number["Asian"] + race_number_groupb[[j]]["Asian"]
+race_number["Unknown"] <- race_number["Unknown"] + race_number_groupb[[j]]["Unknown"]
+race_number["White"] <- race_number["White"] + race_number_groupb[[j]]["White"]
+if(!is.na(race_number_groupb[[j]]["Native American"])){
+race_number["Native American"] <- race_number["Native American"] + race_number_groupb[[j]]["Native American"]
+}
+}
+race_number/length(f4_all_15)
+race_percent/length(f4_all_15)
+```
+
+ethnicity
+```{r}
+ethnicity_percent <- rep(0,3)
+ethnicity_number <- rep(0,3)
+names(ethnicity_percent) <- names(ethnicity_number) <- c("Hispanic","Not Hispanic","Unknown")
+for (j in seq_along(ethnicity_percent_groupb)) {
+ethnicity_percent["Hispanic"] <- ethnicity_percent["Hispanic"] + ethnicity_percent_groupb[[j]]["Hispanic"]
+ethnicity_percent["Not Hispanic"] <- ethnicity_percent["Not Hispanic"] + ethnicity_percent_groupb[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_percent_groupb[[j]]["Unknown"])){
+ethnicity_percent["Unknown"] <- ethnicity_percent["Unknown"] + ethnicity_percent_groupb[[j]]["Unknown"]
+}
+
+ethnicity_number["Hispanic"] <- ethnicity_number["Hispanic"] + ethnicity_number_groupb[[j]]["Hispanic"]
+ethnicity_number["Not Hispanic"] <- ethnicity_number["Not Hispanic"] + ethnicity_number_groupb[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_number_groupb[[j]]["Unknown"])){
+ethnicity_number["Unknown"] <- ethnicity_number["Unknown"] + ethnicity_number_groupb[[j]]["Unknown"]
+}
+
+}
+ethnicity_number/length(f4_all_15)
+ethnicity_percent/length(f4_all_15)
+```
+
+outcome
+```{r}
+outcome_percent <- rep(0,2)
+outcome_number <- rep(0,2)
+names(outcome_percent) <- names(outcome_number) <- c("alive","deceased")
+for (j in seq_along(ethnicity_percent_groupb)) {
+outcome_percent["alive"] <- outcome_percent["alive"] + outcome_percent_groupb[[j]]["alive"]
+outcome_percent["deceased"] <- outcome_percent["deceased"] + outcome_percent_groupb[[j]]["deceased"]
+
+outcome_number["alive"] <- outcome_number["alive"] + outcome_number_groupb[[j]]["alive"]
+outcome_number["deceased"] <- outcome_number["deceased"] + outcome_number_groupb[[j]]["deceased"]
+}
+outcome_percent/length(f4_all_15)
+outcome_number/length(f4_all_15)
+nnnnn <- rep(0,length(ethnicity_percent_groupb))
+for (j in seq_along(ethnicity_percent_groupb)) {
+ nnnnn[j] <- outcome_percent_groupb[[j]][["alive"]]
+}
+sd(nnnnn)
+```
+
+
+(9.1) groupb_live
+
+for each simulation
+```{r}
+t <- total == 15
+f4_all_15 <- f4_all[t]
+mean_groupb <- rep(0,length(f4_all_15))
+sd_groupb <- rep(0,length(f4_all_15))
+gender_percent_groupb <- 0
+gender_number_groupb <- 0
+race_percent_groupb <- NULL
+race_number_groupb <- NULL
+ethnicity_percent_groupb <- NULL
+ethnicity_number_groupb <- NULL
+outcome_percent_groupb <- NULL
+outcome_number_groupb <- NULL
+for (j in seq_along(f4_all_15)) {
+  cat("i = ", j, "\n")
+groupb_15 <- f4_all_15[[j]]$pat_enc_csn_id
+groupb_15_id <- f4_all_15[[j]]$pat_id
+
+middle <- NULL
+outcome_groupb <- as.character(rep(0,length(groupb_15_id)))
+for (i in seq_along(groupb_15)) {
+  middle[[i]] <- cohort_new[cohort_new$pat_id %in% groupb_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"dead"
+  if(sum(middle[[i]] %in% "deceased") > 0){
+    outcome_groupb[i] <- "deceased" 
+  } else {
+    outcome_groupb[i] <- "alive" 
+  }
+}
+
+groupb_15_id_live <- groupb_15_id[outcome_groupb == "alive"]
+
+
+#AGE
+age_groupb <- rep(0,length(groupb_15_id_live))
+for (i in 1:length(groupb_15_id_live)) {
+age_groupb[i] <- max(cohort_new[cohort_new$pat_id %in% groupb_15_id_live[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"age (y)")
+}
+mean_groupb[j] <- mean(age_groupb,na.rm = T)
+sd_groupb[j] <- sd(age_groupb,na.rm = T) 
+#GENDER
+gender_groupb <- rep(0,length(groupb_15_id_live))
+for (i in 1:length(groupb_15_id_live)) {
+ gender_groupb[i] <- unique(cohort_new[cohort_new$pat_id %in% groupb_15_id_live[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$sex)
+}
+t1 <- table(gender_groupb)
+gender_percent_groupb <- t1/length(groupb_15_id_live) + gender_percent_groupb
+gender_number_groupb <- t1 + gender_number_groupb
+#RACE
+race_groupb <- rep(0,length(groupb_15_id_live))
+for (i in 1:length(groupb_15_id_live)) {
+ race_groupb[i] <- unique(cohort_new[cohort_new$pat_id %in% groupb_15_id_live[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$race_new)
+}
+t2 <- table(race_groupb)
+race_percent_groupb[[j]] <- t2/length(groupb_15_id_live)
+race_number_groupb[[j]] <- t2
+#ETHNICITY
+eth_groupb <- rep(0,length(groupb_15_id_live))
+for (i in 1:length(groupb_15_id_live)) {
+ eth_groupb[i] <- unique(cohort_new[cohort_new$pat_id %in% groupb_15_id_live[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$ethnicity_new)
+}
+t3 <- table(eth_groupb)
+ethnicity_percent_groupb[[j]] <- t3/length(groupb_15_id_live)
+ethnicity_number_groupb[[j]] <- t3
+
+}
+
+
+```
+
+
+
+
+age
+```{r}
+mean(mean_groupb) #mean
+mean(sd_groupb) #sd
+```
+gender
+```{r}
+gender_number_groupb/length(f4_all_15)
+gender_percent_groupb/length(f4_all_15)
+```
+
+race
+```{r}
+race_percent <- rep(0,5)
+race_number <- rep(0,5)
+names(race_percent) <- names(race_number) <- c("African American","Asian","Unknown","White","Native American")
+for (j in seq_along(race_percent_groupb)) {
+if(!is.na(race_percent_groupb[[j]]["Unknown"])){
+race_percent["Unknown"] <- race_percent["Unknown"] + race_percent_groupb[[j]]["Unknown"]
+}
+if(!is.na(race_percent_groupb[[j]]["White"])){
+race_percent["White"] <- race_percent["White"] + race_percent_groupb[[j]]["White"]
+}
+if(!is.na(race_percent_groupb[[j]]["Native American"])){
+race_percent["Native American"] <- race_percent["Native American"] + race_percent_groupb[[j]]["Native American"]
+}
+if(!is.na(race_percent_groupb[[j]]["African American"])){
+race_percent["African American"] <- race_percent["African American"] + race_percent_groupb[[j]]["African American"]
+}
+if(!is.na(race_percent_groupb[[j]]["Asian"])){
+race_percent["Asian"] <- race_percent["Asian"] + race_percent_groupb[[j]]["Asian"]
+}
+if(!is.na(race_number_groupb[[j]]["African American"])){
+race_number["African American"] <- race_number["African American"] + race_number_groupb[[j]]["African American"]
+}
+if(!is.na(race_number_groupb[[j]]["Asian"])){
+race_number["Asian"] <- race_number["Asian"] + race_number_groupb[[j]]["Asian"]
+}
+if(!is.na(race_number_groupb[[j]]["Unknown"])){
+race_number["Unknown"] <- race_number["Unknown"] + race_number_groupb[[j]]["Unknown"]
+}
+if(!is.na(race_number_groupb[[j]]["White"])){
+race_number["White"] <- race_number["White"] + race_number_groupb[[j]]["White"]
+}
+if(!is.na(race_number_groupb[[j]]["Native American"])){
+race_number["Native American"] <- race_number["Native American"] + race_number_groupb[[j]]["Native American"]
+}
+}
+race_number/length(f4_all_15)
+race_percent/length(f4_all_15)
+```
+
+ethnicity
+```{r}
+ethnicity_percent <- rep(0,3)
+ethnicity_number <- rep(0,3)
+names(ethnicity_percent) <- names(ethnicity_number) <- c("Hispanic","Not Hispanic","Unknown")
+for (j in seq_along(ethnicity_percent_groupb)) {
+ethnicity_percent["Hispanic"] <- ethnicity_percent["Hispanic"] + ethnicity_percent_groupb[[j]]["Hispanic"]
+ethnicity_percent["Not Hispanic"] <- ethnicity_percent["Not Hispanic"] + ethnicity_percent_groupb[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_percent_groupb[[j]]["Unknown"])){
+ethnicity_percent["Unknown"] <- ethnicity_percent["Unknown"] + ethnicity_percent_groupb[[j]]["Unknown"]
+}
+
+ethnicity_number["Hispanic"] <- ethnicity_number["Hispanic"] + ethnicity_number_groupb[[j]]["Hispanic"]
+ethnicity_number["Not Hispanic"] <- ethnicity_number["Not Hispanic"] + ethnicity_number_groupb[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_number_groupb[[j]]["Unknown"])){
+ethnicity_number["Unknown"] <- ethnicity_number["Unknown"] + ethnicity_number_groupb[[j]]["Unknown"]
+}
+
+}
+ethnicity_number/length(f4_all_15)
+ethnicity_percent/length(f4_all_15)
+```
+
+(9.2) groupb_dead
+
+for each simulation
+```{r}
+t <- total == 15
+f4_all_15 <- f4_all[t]
+mean_groupb <- rep(0,length(f4_all_15))
+sd_groupb <- rep(0,length(f4_all_15))
+gender_percent_groupb <- 0
+gender_number_groupb <- 0
+race_percent_groupb <- NULL
+race_number_groupb <- NULL
+ethnicity_percent_groupb <- NULL
+ethnicity_number_groupb <- NULL
+outcome_percent_groupb <- NULL
+outcome_number_groupb <- NULL
+for (j in seq_along(f4_all_15)) {
+  cat("i = ", j, "\n")
+groupb_15 <- f4_all_15[[j]]$pat_enc_csn_id
+groupb_15_id <- f4_all_15[[j]]$pat_id
+
+middle <- NULL
+outcome_groupb <- as.character(rep(0,length(groupb_15_id)))
+for (i in seq_along(groupb_15)) {
+  middle[[i]] <- cohort_new[cohort_new$pat_id %in% groupb_15_id[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"dead"
+  if(sum(middle[[i]] %in% "deceased") > 0){
+    outcome_groupb[i] <- "deceased" 
+  } else {
+    outcome_groupb[i] <- "alive" 
+  }
+}
+
+groupb_15_id_dead <- groupb_15_id[outcome_groupb == "deceased"]
+
+
+#AGE
+age_groupb <- rep(0,length(groupb_15_id_dead))
+for (i in 1:length(groupb_15_id_dead)) {
+age_groupb[i] <- max(cohort_new[cohort_new$pat_id %in% groupb_15_id_dead[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"age (y)")
+}
+mean_groupb[j] <- mean(age_groupb,na.rm = T)
+sd_groupb[j] <- sd(age_groupb,na.rm = T) 
+#GENDER
+gender_groupb <- rep(0,length(groupb_15_id_dead))
+for (i in 1:length(groupb_15_id_dead)) {
+ gender_groupb[i] <- unique(cohort_new[cohort_new$pat_id %in% groupb_15_id_dead[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$sex)
+}
+t1 <- table(gender_groupb)
+gender_percent_groupb <- t1/length(groupb_15_id_dead) + gender_percent_groupb
+gender_number_groupb <- t1 + gender_number_groupb
+#RACE
+race_groupb <- rep(0,length(groupb_15_id_dead))
+for (i in 1:length(groupb_15_id_dead)) {
+ race_groupb[i] <- unique(cohort_new[cohort_new$pat_id %in% groupb_15_id_dead[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$race_new)
+}
+t2 <- table(race_groupb)
+race_percent_groupb[[j]] <- t2/length(groupb_15_id_dead)
+race_number_groupb[[j]] <- t2
+#ETHNICITY
+eth_groupb <- rep(0,length(groupb_15_id_dead))
+for (i in 1:length(groupb_15_id_dead)) {
+ eth_groupb[i] <- unique(cohort_new[cohort_new$pat_id %in% groupb_15_id_dead[i] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$ethnicity_new)
+}
+t3 <- table(eth_groupb)
+ethnicity_percent_groupb[[j]] <- t3/length(groupb_15_id_dead)
+ethnicity_number_groupb[[j]] <- t3
+
+}
+
+
+```
+
+
+age
+```{r}
+mean(mean_groupb) #mean
+mean(sd_groupb) #sd
+```
+gender
+```{r}
+gender_number_groupb/length(f4_all_15)
+gender_percent_groupb/length(f4_all_15)
+```
+
+race
+```{r}
+race_percent <- rep(0,5)
+race_number <- rep(0,5)
+names(race_percent) <- names(race_number) <- c("African American","Asian","Unknown","White","Native American")
+for (j in seq_along(race_percent_groupb)) {
+race_percent["African American"] <- race_percent["African American"] + race_percent_groupb[[j]]["African American"]
+race_percent["Asian"] <- race_percent["Asian"] + race_percent_groupb[[j]]["Asian"]
+race_percent["Unknown"] <- race_percent["Unknown"] + race_percent_groupb[[j]]["Unknown"]
+race_percent["White"] <- race_percent["White"] + race_percent_groupb[[j]]["White"]
+if(!is.na(race_percent_groupb[[j]]["Native American"])){
+race_percent["Native American"] <- race_percent["Native American"] + race_percent_groupb[[j]]["Native American"]
+}
+race_number["African American"] <- race_number["African American"] + race_number_groupb[[j]]["African American"]
+race_number["Asian"] <- race_number["Asian"] + race_number_groupb[[j]]["Asian"]
+race_number["Unknown"] <- race_number["Unknown"] + race_number_groupb[[j]]["Unknown"]
+race_number["White"] <- race_number["White"] + race_number_groupb[[j]]["White"]
+if(!is.na(race_number_groupb[[j]]["Native American"])){
+race_number["Native American"] <- race_number["Native American"] + race_number_groupb[[j]]["Native American"]
+}
+}
+race_number/length(f4_all_15)
+race_percent/length(f4_all_15)
+```
+
+ethnicity
+```{r}
+ethnicity_percent <- rep(0,3)
+ethnicity_number <- rep(0,3)
+names(ethnicity_percent) <- names(ethnicity_number) <- c("Hispanic","Not Hispanic","Unknown")
+for (j in seq_along(ethnicity_percent_groupb)) {
+ethnicity_percent["Hispanic"] <- ethnicity_percent["Hispanic"] + ethnicity_percent_groupb[[j]]["Hispanic"]
+ethnicity_percent["Not Hispanic"] <- ethnicity_percent["Not Hispanic"] + ethnicity_percent_groupb[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_percent_groupb[[j]]["Unknown"])){
+ethnicity_percent["Unknown"] <- ethnicity_percent["Unknown"] + ethnicity_percent_groupb[[j]]["Unknown"]
+}
+
+ethnicity_number["Hispanic"] <- ethnicity_number["Hispanic"] + ethnicity_number_groupb[[j]]["Hispanic"]
+ethnicity_number["Not Hispanic"] <- ethnicity_number["Not Hispanic"] + ethnicity_number_groupb[[j]]["Not Hispanic"]
+if(!is.na(ethnicity_number_groupb[[j]]["Unknown"])){
+ethnicity_number["Unknown"] <- ethnicity_number["Unknown"] + ethnicity_number_groupb[[j]]["Unknown"]
+}
+
+}
+ethnicity_number/length(f4_all_15)
+ethnicity_percent/length(f4_all_15)
+```
+
+
+
+
+### 4. Figure 3
+
+survival rates for different subgroups in groupa
+only use 4/14
+
+```{r}
+sur1 <- rep(0,length(f3_all_15))
+sur2 <- rep(0,length(f3_all_15))
+sur3 <- rep(0,length(f3_all_15))
+sur4 <- rep(0,length(f3_all_15))
+sur5 <- rep(0,length(f3_all_15))
+sur6 <- rep(0,length(f3_all_15))
+sur7 <- rep(0,length(f3_all_15))
+sur8 <- rep(0,length(f3_all_15))
+sur9 <- rep(0,length(f3_all_15))
+sur10 <- rep(0,length(f3_all_15))
+n_b0 <- rep(0,length(f3_all_15))
+n_b21 <- rep(0,length(f3_all_15))
+n_b22 <- rep(0,length(f3_all_15))
+n_b23 <- rep(0,length(f3_all_15))
+n_b51 <- rep(0,length(f3_all_15))
+n_b52 <- rep(0,length(f3_all_15))
+n_b53 <- rep(0,length(f3_all_15))
+n_b71 <- rep(0,length(f3_all_15))
+n_b72 <- rep(0,length(f3_all_15))
+n_b73 <- rep(0,length(f3_all_15))
+for (j in seq_along(f3_all_15)) {
+  sf <- f3_all_15[[j]]
+  sf <- sf[!(sf$pat_enc_csn_id == 787668565 | sf$pat_enc_csn_id == 788566195),]
+  sf_b0 <- sf[sf$intubated_day == 0,]
+  sf_b21 <- sf[sf$intubated_day == 2 & sf$`SOFA Vtot` <= 7,]
+  sf_b22 <- sf[sf$intubated_day == 2 & sf$`SOFA Vtot` <= 11 & sf$`SOFA Vtot` >= 8,]
+  sf_b23 <- sf[sf$intubated_day == 2 & sf$`SOFA Vtot` > 11,]
+  sf_b51 <- sf[sf$intubated_day == 5 & sf$`SOFA Vtot` <= 7,]
+  sf_b52 <- sf[sf$intubated_day == 5 & sf$`SOFA Vtot` <= 11 & sf$`SOFA Vtot` >= 8,]
+  sf_b53 <- sf[sf$intubated_day == 5 & sf$`SOFA Vtot` > 11,]
+  sf_b71 <- sf[sf$intubated_day >= 7 & sf$`SOFA Vtot` <= 7,]
+  sf_b72 <- sf[sf$intubated_day >= 7 & sf$`SOFA Vtot` <= 11 & sf$`SOFA Vtot` >= 8,]
+  sf_b73 <- sf[sf$intubated_day >= 7 & sf$`SOFA Vtot` > 11,]
+
+  n_b0[j] <- nrow(sf_b0)
+  n_b21[j] <- nrow(sf_b21)
+  n_b22[j] <- nrow(sf_b22)
+  n_b23[j] <- nrow(sf_b23)
+  n_b51[j] <- nrow(sf_b51)
+  n_b52[j] <- nrow(sf_b52)
+  n_b53[j] <- nrow(sf_b53)
+  n_b71[j] <- nrow(sf_b71)
+  n_b72[j] <- nrow(sf_b72)
+  n_b73[j] <- nrow(sf_b73)
+
+  id1 <- sf_b0$pat_id
+  outcome1 <- rep(0,length(id1))
+  for (i in seq_along(id1)) {
+    se_outcome <- cohort_new[cohort_new$pat_id == id1[i],]$"dead"
+    if(sum(se_outcome == "deceased") == 1){
+      outcome1[i] <- "deceased"
+    } else {
+      outcome1[i] <- "alive"
+    }
+  }
+  sur1[j] <- table(outcome1)["alive"]/length(outcome1)
+  sur1[j] <- ifelse(is.na(sur1[j]), 0,sur1[j])
+
+  id2 <- sf_b21$pat_id
+  outcome2 <- rep(0,length(id2))
+  for (i in seq_along(id2)) {
+    se_outcome <- cohort_new[cohort_new$pat_id == id2[i],]$"dead"
+    if(sum(se_outcome == "deceased") == 1){
+      outcome2[i] <- "deceased"
+    } else {
+      outcome2[i] <- "alive"
+    }
+  }
+  sur2[j] <- table(outcome2)["alive"]/length(outcome2)
+  sur2[j] <- ifelse(is.na(sur2[j]), 0,sur2[j])
+
+  id3 <- sf_b22$pat_id
+  outcome3 <- rep(0,length(id3))
+  for (i in seq_along(id3)) {
+    se_outcome <- cohort_new[cohort_new$pat_id == id3[i],]$"dead"
+    if(sum(se_outcome == "deceased") == 1){
+      outcome3[i] <- "deceased"
+    } else {
+      outcome3[i] <- "alive"
+    }
+  }
+  sur3[j] <- table(outcome3)["alive"]/length(outcome3)
+  sur3[j] <- ifelse(is.na(sur3[j]), 0,sur3[j])
+
+  id4 <- sf_b23$pat_id
+  outcome4 <- rep(0,length(id4))
+  for (i in seq_along(id4)) {
+    se_outcome <- cohort_new[cohort_new$pat_id == id4[i],]$"dead"
+    if(sum(se_outcome == "deceased") >= 1){
+      outcome4[i] <- "deceased"
+    } else {
+      outcome4[i] <- "alive"
+    }
+  }
+  sur4[j] <- table(outcome4)["alive"]/length(outcome4)
+  sur4[j] <- ifelse(is.na(sur4[j]), 0,sur4[j])
+
+  id5 <- sf_b51$pat_id
+  outcome5 <- rep(0,length(id5))
+  for (i in seq_along(id5)) {
+    se_outcome <- cohort_new[cohort_new$pat_id == id5[i],]$"dead"
+    if(sum(se_outcome == "deceased") == 1){
+      outcome5[i] <- "deceased"
+    } else {
+      outcome5[i] <- "alive"
+    }
+  }
+  sur5[j] <- table(outcome5)["alive"]/length(outcome5)
+  sur5[j] <- ifelse(is.na(sur5[j]), 0,sur5[j])
+
+  id6 <- sf_b52$pat_id
+  outcome6 <- rep(0,length(id6))
+  for (i in seq_along(id6)) {
+    se_outcome <- cohort_new[cohort_new$pat_id == id6[i],]$"dead"
+    if(sum(se_outcome == "deceased") == 1){
+      outcome6[i] <- "deceased"
+    } else {
+      outcome6[i] <- "alive"
+    }
+  }
+  sur6[j] <- table(outcome6)["alive"]/length(outcome6)
+  sur6[j] <- ifelse(is.na(sur6[j]), 0,sur6[j])
+
+  id7 <- sf_b53$pat_id
+  outcome7 <- rep(0,length(id7))
+  for (i in seq_along(id7)) {
+    se_outcome <- cohort_new[cohort_new$pat_id == id7[i],]$"dead"
+    if(sum(se_outcome == "deceased") == 1){
+      outcome7[i] <- "deceased"
+    } else {
+      outcome7[i] <- "alive"
+    }
+  }
+  sur7[j] <- table(outcome7)["alive"]/length(outcome7)
+  sur7[j] <- ifelse(is.na(sur7[j]), 0,sur7[j])
+
+  id8 <- sf_b71$pat_id
+  outcome8 <- rep(0,length(id8))
+  for (i in seq_along(id8)) {
+    se_outcome <- cohort_new[cohort_new$pat_id == id8[i],]$"dead"
+    if(sum(se_outcome == "deceased") == 1){
+      outcome8[i] <- "deceased"
+    } else {
+      outcome8[i] <- "alive"
+    }
+  }
+  sur8[j] <- table(outcome8)["alive"]/length(outcome8)
+  sur8[j] <- ifelse(is.na(sur8[j]), 0,sur8[j])
+
+  id9 <- sf_b72$pat_id
+  outcome9 <- rep(0,length(id9))
+  for (i in seq_along(id9)) {
+    se_outcome <- cohort_new[cohort_new$pat_id == id9[i],]$"dead"
+    if(sum(se_outcome == "deceased") == 1){
+      outcome9[i] <- "deceased"
+    } else {
+      outcome9[i] <- "alive"
+    }
+  }
+  sur9[j] <- table(outcome9)["alive"]/length(outcome9)
+  sur9[j] <- ifelse(is.na(sur9[j]), 0,sur9[j])
+
+  id10 <- sf_b73$pat_id
+  outcome10 <- rep(0,length(id10))
+  for (i in seq_along(id10)) {
+    se_outcome <- cohort_new[cohort_new$pat_id == id10[i],]$"dead"
+    if(sum(se_outcome == "deceased") == 1){
+      outcome10[i] <- "deceased"
+    } else {
+      outcome10[i] <- "alive"
+    }
+  }
+  sur10[j] <- table(outcome10)["alive"]/length(outcome10)
+  sur10[j] <- ifelse(is.na(sur10[j]), 0,sur10[j])
+}
+```
+
+(1) day0, sofa > 11
+
+```{r}
+sum(sur1)/length(f3_all_15)
+sum(n_b0)/length(f3_all_15)
+```
+
+
+
+
+(2) day2, sofa <= 7
+
+```{r}
+sum(sur2)/length(f3_all_15)
+sum(n_b21)/length(f3_all_15)
+```
+
+(3) day2, sofa 8-11
+
+```{r}
+sum(sur3)/length(f3_all_15)
+sum(n_b22)/length(f3_all_15)
+```
+
+(4) day2, sofa > 11
+
+```{r}
+sum(sur4)/length(f3_all_15)
+sum(n_b23)/length(f3_all_15)
+```
+
+(5) day5, sofa <= 7
+
+```{r}
+sum(sur5)/length(f3_all_15)
+sum(n_b51)/length(f3_all_15)
+```
+
+(6) day5, sofa 8-11
+
+```{r}
+sum(sur6)/length(f3_all_15)
+sum(n_b52)/length(f3_all_15)
+```
+
+(7) day5, sofa > 11
+
+```{r}
+sum(sur7)/length(f3_all_15)
+sum(n_b53)/length(f3_all_15)
+```
+
+(8) day7, sofa <= 7
+
+```{r}
+sum(sur8)/length(f3_all_15)
+sum(n_b71)/length(f3_all_15)
+```
+
+(9) day7, sofa 8-11
+
+```{r}
+sum(sur9)/length(f3_all_15)
+sum(n_b72)/length(f3_all_15)
+```
+
+(10) day7, sofa > 11
+
+```{r}
+sum(sur10)/length(f3_all_15)
+sum(n_b73)/length(f3_all_15)
+```
+
+### 5. Figure 4
+
+(1) For red and yellow patients in groupb, how many of them subsequently become blue? (Red and yellow)
+```{r}
+total_n2 <- rep(0,length(f4_all_15))
+l <- rep(0,length(f4_all_15))
+for (i in 1:length(f4_all_15)) {
+  cat("i = ", i, "\n")
+df1 <- f4_all_15[[i]]
+index <- df1$group %in% c("Yellow","Red")
+df2_id <- df1[index, ]$pat_id
+l[i] <- length(df2_id)
+total_n <- 0
+for (j in df2_id) {
+  n <- sum(sofa2[sofa2$pat_id == j & sofa2$date > "2020-03-30",]$group %in% "Blue")
+  if(n >= 1){
+    total_n <- total_n + 1
+  }
+}
+total_n2[i] <- total_n
+}
+sum(total_n2)/length(f4_all_15)
+```
+
+(2) Does anyone randomly get chosen to lose the ventilator (from groupb to groupa)? On what day (intubated day)
+
+```{r}
+df3 <- NULL
+df3_num <- rep(0,length(f3_all_15))
+total_number <- rep(0,length(f3_all_15))
+for (i in 1:length(f3_all_15)) {
+  cat("i = ", i, "\n")
+df1 <- f4_all_15[[i]]
+df2 <- f3_all_15[[i]]
+id <- df1$pat_id[df1$pat_id %in% df2$pat_id]
+df3[[i]] <- df2[df2$pat_id %in% id,]
+total_number[i] <- nrow(df3[[i]])
+df3_num[i] <- mean(df3[[i]]$intubated_day)
+}
+mean(total_number) #the number of people
+mean(df3_num) #the intubated day
+```
+
+### 6. How many patients in groupb turn to groupa at the end? What about the survival rate for these patients?
+
+```{r}
+turn <- rep(0,length(f4_all_15))
+turn_id <- NULL
+survival_turn_blue <- rep(0,length(f4_all_15))
+for (i in 1:length(f4_all_15)) {
+  cat("i = ", i, "\n")
+  turn[i] <- sum(f4_all_15[[i]]$pat_id %in% f3_all_15[[i]]$pat_id)
+  turn_id[[i]] <- f4_all_15[[i]]$pat_id[f4_all_15[[i]]$pat_id %in% f3_all_15[[i]]$pat_id]
+  #survival rate
+turn_outcome <- vector(mode = "character", length = length(turn_id[[i]]))
+for (j in seq_along(turn_id[[i]])) {
+  outcome <- cohort_new[cohort_new$pat_id == turn_id[[i]][j],]$"dead"
+    if(sum(outcome == "deceased") == 1){
+      turn_outcome[j] <- "deceased"
+    } else {
+      turn_outcome[j] <- "alive"
+    }
+}
+survival_turn_blue[i] <- table(turn_outcome)["alive"]/length(turn_outcome)
+
+if(is.na(survival_turn_blue[i])){
+  survival_turn_blue[i] <- 0
+}
+
+
+}
+
+
+#number of patients who were in groupb but turn to groupa at the end
+mean(turn)
+#survival rate
+mean(survival_turn_blue)
+```
+
+There are 22.6 patients who were in groupb but turn to groupa at the end on average. For these patients, the survival rate is around 0.353 on average.
+
+### 7. turn blue
+
+(1) For red patients in groupb, how many of them subsequently become blue and how many days does it take for this to happen? What about the survival rate for these patients?
+
+```{r}
+
+l <- rep(0,length(f4_all_15))
+total_n2 <- rep(0,length(f4_all_15))
+day_blue <- rep(0,length(f4_all_15))
+score_blue <- rep(0,length(f4_all_15))
+survival_turn_blue <- rep(0,length(f4_all_15))
+for (i in 1:length(f4_all_15)) {
+  cat("i = ", i, "\n")
+df1 <- f4_all_15[[i]]
+index <- df1$group == "Red"
+df2_id <- df1[index, ]$pat_id
+total_n <- 0
+logit <- vector(mode = "logical", length = length(df2_id))
+for (j in seq_along(df2_id)) {
+  #number of patients
+  n <- sum(sofa2[sofa2$pat_id == df2_id[j] & sofa2$date > "2020-03-30" & sofa2$date < "2020-04-15",]$group == "Blue")
+  if(n >= 1){
+    total_n <- total_n + 1
+    logit[j] <- TRUE
+  } else {
+     logit[j] <- FALSE
+  }
+}
+total_n2[i] <- total_n
+df3_blue <- df2_id[logit]
+#number of days
+day <- rep(0,length(df3_blue))
+for (l in seq_along(df3_blue)) {
+ day[l] <- which(sofa2[sofa2$pat_id == df3_blue[l] & sofa2$date > "2020-03-30" & sofa2$date < "2020-04-15",]$group == "Blue")[1]
+}
+ day_blue[i] <- mean(day)
+#sofa score
+score <- rep(0,length(df3_blue))
+for (l in seq_along(df3_blue)) {
+ score[l] <- sofa2[sofa2$pat_id == df3_blue[l] & sofa2$date > "2020-03-30" & sofa2$date < "2020-04-15",]$`SOFA Vtot`[day[l]]
+}
+score_blue[i] <- mean(score)
+#survival rate
+outcome_blue <- vector(mode = "character", length = length(df3_blue))
+for (m in seq_along(df3_blue)) {
+  outcome <- cohort_new[cohort_new$pat_id == df3_blue[m],]$"dead"
+    if(sum(outcome == "deceased") == 1){
+      outcome_blue[m] <- "deceased"
+    } else {
+      outcome_blue[m] <- "alive"
+    }
+}
+survival_turn_blue[i] <- table(outcome_blue)["alive"]/length(outcome_blue)
+}
+#number of patients
+summary(total_n2)
+#number of days
+summary(day_blue)
+#sofa score
+summary(score_blue)
+#survival rate
+summary(survival_turn_blue)
+
+```
+
+62.8 patients, 4.05 dates, 7.83 score, 0.347 survival rate
+
+(2) For yellow patients in groupb, how many of them subsequently become blue and how many days does it take for this to happen? What about the survival rate for these patients?
+
+```{r}
+l <- rep(0,length(f4_all_15))
+total_n2 <- rep(0,length(f4_all_15))
+day_blue <- rep(0,length(f4_all_15))
+score_blue <- rep(0,length(f4_all_15))
+survival_turn_blue <- rep(0,length(f4_all_15))
+for (i in 1:length(f4_all_15)) {
+  cat("i = ", i, "\n")
+df1 <- f4_all_15[[i]]
+index <- df1$group == "Yellow"
+df2_id <- df1[index, ]$pat_id
+total_n <- 0
+logit <- vector(mode = "logical", length = length(df2_id))
+for (j in seq_along(df2_id)) {
+  #number of patients
+  n <- sum(sofa2[sofa2$pat_id == df2_id[j] & sofa2$date > "2020-03-30" & sofa2$date < "2020-04-15",]$group == "Blue")
+  if(n >= 1){
+    total_n <- total_n + 1
+    logit[j] <- TRUE
+  } else {
+     logit[j] <- FALSE
+  }
+}
+total_n2[i] <- total_n
+df3_blue <- df2_id[logit]
+#number of days
+day <- rep(0,length(df3_blue))
+for (l in seq_along(df3_blue)) {
+ day[l] <- which(sofa2[sofa2$pat_id == df3_blue[l] & sofa2$date > "2020-03-30" & sofa2$date < "2020-04-15",]$group == "Blue")[1] - 1
+}
+ day_blue[i] <- mean(day)
+#sofa score
+score <- rep(0,length(df3_blue))
+for (l in seq_along(df3_blue)) {
+ score[l] <- sofa2[sofa2$pat_id == df3_blue[l] & sofa2$date > "2020-03-30" & sofa2$date < "2020-04-15",]$`SOFA Vtot`[day[l]]
+}
+score_blue[i] <- mean(score)
+#survival rate
+outcome_blue <- vector(mode = "character", length = length(df3_blue))
+for (m in seq_along(df3_blue)) {
+  outcome <- cohort_new[cohort_new$pat_id == df3_blue[m],]$"dead"
+    if(sum(outcome == "deceased") == 1){
+      outcome_blue[m] <- "deceased"
+    } else {
+      outcome_blue[m] <- "alive"
+    }
+}
+survival_turn_blue[i] <- table(outcome_blue)["alive"]/length(outcome_blue)
+}
+#number of patients
+summary(total_n2)
+#number of days
+summary(day_blue)
+#sofa score
+summary(score_blue)
+#survival rate
+summary(survival_turn_blue)
+
+```
+
+
+### 8. turn groupa
+
+(1) For red patients in groupb, how many of them subsequently be in groupa at the end and how many days does it take for this to happen? What about the survival rate for these patients?
+
+```{r}
+red_a <- rep(0,length(f4_all_15))
+red_a_day <- rep(0,length(f4_all_15))
+red_a_score <- rep(0,length(f4_all_15))
+survival_turn_a <- rep(0,length(f4_all_15))
+for (i in 1:length(f4_all_15)) {
+  cat("i = ", i, "\n")
+df1 <- f4_all_15[[i]]
+index <- df1$group == "Red"
+df2_id <- df1[index, ]$pat_id
+#number of patients
+red_a[i] <- length(intersect(df2_id, f3_all_15[[i]]$pat_id))
+#df in groupa
+df3 <- f3_all_15[[i]][f3_all_15[[i]]$pat_id %in% intersect(df2_id, f3_all_15[[i]]$pat_id),]
+#number of days
+red_a_day[i] <- mean(df3$intubated_day)
+#sofa score
+red_a_score[i] <- mean(df3$`SOFA Vtot`)
+#survival rate
+outcome_a <- vector(mode = "character", length = length(df3$pat_id))
+for (m in seq_along(df3$pat_id)) {
+  outcome <- cohort_new[cohort_new$pat_id == df3$pat_id[m],]$"dead"
+    if(sum(outcome == "deceased") == 1){
+      outcome_a[m] <- "deceased"
+    } else {
+      outcome_a[m] <- "alive"
+    }
+}
+survival_turn_a[i] <- table(outcome_a)["alive"]/length(outcome_a)
+
+if(is.na(survival_turn_a[i])){
+  survival_turn_a[i] <- 0
+}
+
+}
+#number of patients
+summary(red_a)
+#number of days
+summary(red_a_day)
+#sofa score
+summary(red_a_score)
+#survival rate
+summary(survival_turn_a)
+
+```
+
+
+
+(2) For yellow patients in groupb, how many of them subsequently be in groupa at the end and how many days does it take for this to happen? What about the survival rate for these patients?
+
+```{r}
+yellow_a <- rep(0,length(f4_all_15))
+yellow_a_day <- rep(0,length(f4_all_15))
+yellow_a_score <- rep(0,length(f4_all_15))
+survival_turn_a <- rep(0,length(f4_all_15))
+for (i in 1:length(f4_all_15)) {
+   cat("i = ", i, "\n")
+df1 <- f4_all_15[[i]]
+index <- df1$group == "Yellow"
+df2_id <- df1[index, ]$pat_id
+#number of patients
+yellow_a[i] <- length(intersect(df2_id, f3_all_15[[i]]$pat_id))
+#df in groupa
+df3 <- f3_all_15[[i]][f3_all_15[[i]]$pat_id %in% intersect(df2_id, f3_all_15[[i]]$pat_id),]  
+#number of days
+yellow_a_day[i] <- mean(df3$intubated_day)
+#sofa score
+yellow_a_score[i] <- mean(df3$`SOFA Vtot`)
+#survival rate
+outcome_a <- vector(mode = "character", length = length(df3$pat_id))
+for (m in seq_along(df3$pat_id)) {
+  outcome <- cohort_new[cohort_new$pat_id == df3$pat_id[m],]$"dead"
+    if(sum(outcome == "deceased") == 1){
+      outcome_a[m] <- "deceased"
+    } else {
+      outcome_a[m] <- "alive"
+    }
+}
+survival_turn_a[i] <- ifelse(is.na(table(outcome_a)["alive"]/length(outcome_a)),0,table(outcome_a)["alive"]/length(outcome_a))
+}
+#number of patients
+summary(yellow_a)
+#number of days
+summary(yellow_a_day)
+#sofa score
+summary(yellow_a_score)
+#survival rate
+summary(survival_turn_a)
+
+```
+
+
+
+(3) For blue patients in groupb, how many of them subsequently be in groupa at the end and how many days does it take for this to happen? What about the survival rate for these patients?
+
+```{r}
+blue_a <- rep(0,length(f4_all_15))
+blue_a_day <- rep(0,length(f4_all_15))
+blue_a_score <- rep(0,length(f4_all_15))
+survival_turn_a <- rep(0,length(f4_all_15))
+for (i in 1:length(f4_all_15)) {
+  cat("i = ", i, "\n")
+df1 <- f4_all_15[[i]]
+index <- df1$group == "Blue"
+df2_id <- df1[index, ]$pat_id
+#number of patients
+blue_a[i] <- length(intersect(df2_id, f3_all_15[[i]]$pat_id))
+#df in groupa
+df3 <- f3_all_15[[i]][f3_all_15[[i]]$pat_id %in% intersect(df2_id, f3_all_15[[i]]$pat_id),]
+#number of days
+blue_a_day[i] <- mean(df3$intubated_day)
+#sofa score
+blue_a_score[i] <- mean(df3$`SOFA Vtot`)
+#survival rate
+outcome_a <- vector(mode = "character", length = length(df3$pat_id))
+for (m in seq_along(df3$pat_id)) {
+  outcome <- cohort_new[cohort_new$pat_id == df3$pat_id[m],]$"dead"
+    if(sum(outcome == "deceased") == 1){
+      outcome_a[m] <- "deceased"
+    } else {
+      outcome_a[m] <- "alive"
+    }
+}
+survival_turn_a[i] <- ifelse(is.na(table(outcome_a)["alive"]/length(outcome_a)),0,table(outcome_a)["alive"]/length(outcome_a))
+}
+#number of patients
+summary(blue_a)
+#number of days
+summary(blue_a_day,na.rm = T)
+#sofa score
+summary(blue_a_score,na.rm = T)
+#survival rate
+summary(survival_turn_a)
+
+```
+
+
+
+### 9. how many newR/newY/newB are in group B for each simulation? What about the survival rate
+
+```{r}
+newR <- rep(0,length(f4_all_15))
+newY <- rep(0,length(f4_all_15))
+newB <- rep(0,length(f4_all_15))
+survival_red <- rep(0,length(f4_all_15))
+survival_yellow <- rep(0,length(f4_all_15))
+survival_blue <- rep(0,length(f4_all_15))
+for (i in 1:length(f4_all_15)) {
+  cat("i = ", i, "\n")
+  newR[i] <- sum(f4_all_15[[i]]$group == "Red")
+  newY[i] <- sum(f4_all_15[[i]]$group == "Yellow")
+  newB[i] <- sum(f4_all_15[[i]]$group == "Blue")
+  #survival_R
+  red <- f4_all_15[[i]][f4_all_15[[i]]$group == "Red",]
+  outcome_R <- vector(mode = "character", length = length(red$pat_id))
+  for (m in seq_along(red$pat_id)) {
+    outcome <- cohort_new[cohort_new$pat_id == red$pat_id[m],]$"dead"
+    if(sum(outcome == "deceased") == 1){
+      outcome_R[m] <- "deceased"
+    } else {
+      outcome_R[m] <- "alive"
+    }
+}
+survival_red[i] <- ifelse(is.na(table(outcome_R)["alive"]/length(outcome_R)),0,table(outcome_R)["alive"]/length(outcome_R))
+  #survival_y
+  yellow <- f4_all_15[[i]][f4_all_15[[i]]$group == "Yellow",]
+  outcome_Y <- vector(mode = "character", length = length(yellow$pat_id))
+  for (m in seq_along(yellow$pat_id)) {
+    outcome <- cohort_new[cohort_new$pat_id == yellow$pat_id[m],]$"dead"
+    if(sum(outcome == "deceased") == 1){
+      outcome_Y[m] <- "deceased"
+    } else {
+      outcome_Y[m] <- "alive"
+    }
+}
+survival_yellow[i] <- ifelse(is.na(table(outcome_Y)["alive"]/length(outcome_Y)),0,table(outcome_Y)["alive"]/length(outcome_Y))
+
+ #survival_b
+  blue <- f4_all_15[[i]][f4_all_15[[i]]$group == "Blue",]
+  outcome_B <- vector(mode = "character", length = length(blue$pat_id))
+  for (m in seq_along(blue$pat_id)) {
+    outcome <- cohort_new[cohort_new$pat_id == blue$pat_id[m],]$"dead"
+    if(sum(outcome == "deceased") == 1){
+      outcome_B[m] <- "deceased"
+    } else {
+      outcome_B[m] <- "alive"
+    }
+}
+survival_blue[i] <- ifelse(is.na(table(outcome_B)["alive"]/length(outcome_B)),0,table(outcome_B)["alive"]/length(outcome_B))
+}
+
+summary(newR)
+summary(newY)
+summary(newB)
+summary(survival_red)
+summary(survival_yellow)
+summary(survival_blue)
+```
+
+
+### 10. For newRs/newYs/newBs to be in group A, how many days does it take for them to be in group A from admission date?
+
+```{r}
+days_red <- rep(0,length(f3_all_15))
+days_yellow <- rep(0,length(f3_all_15))
+days_blue <- rep(0,length(f3_all_15))
+redd <- sofa2[sofa2$intubated_day == 0 & sofa2$group == "Red",]$pat_id
+yell <- sofa2[sofa2$intubated_day == 0 & sofa2$group == "Yellow",]$pat_id
+bluu <- sofa2[sofa2$intubated_day == 0 & sofa2$group == "Blue",]$pat_id
+for(i in seq_along(f3_all_15)){
+  cat("i = ", i, "\n")
+  e_id <- f3_all_15[[i]]$pat_id
+  er <- e_id[e_id %in% redd]
+  ey <- e_id[e_id %in% yell]
+  eb <- e_id[e_id %in% bluu]
+  diff_days_red <- rep(0,length(er))
+  diff_days_yellow <- rep(0,length(ey))
+  diff_days_blue <- rep(0,length(eb))
+  for (j in seq_along(er)) {
+    in_date <- cohort_new[(cohort_new$pat_id == er[j] & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30"),]$intubation_date[1]
+    a_date <- f3_all_15[[i]][f3_all_15[[i]]$pat_id == er[j],]$date
+    diff_days_red[j] <- difftime(as.character(a_date),as.character(in_date),units = "days")
+  }
+  days_red[i] <- mean(diff_days_red)
+  
+  diff_days_yellow <- rep(0,length(ey))
+  for (j in seq_along(ey)) {
+    in_date <- cohort_new[cohort_new$pat_id == ey[j] & cohort_new$intubation_date < "2020-04-15" &cohort_new$extubation_date > "2020-03-30",]$intubation_date[1]
+    a_date <- f3_all_15[[i]][f3_all_15[[i]]$pat_id == ey[j],]$date
+    diff_days_yellow[j] <- difftime(as.character(a_date),as.character(in_date),units = "days")
+  }
+  days_yellow[i] <- mean(diff_days_yellow)
+  
+  diff_days_blue <- rep(0,length(eb))
+  for (j in seq_along(eb)) {
+    in_date <- cohort_new[cohort_new$pat_id == eb[j] & cohort_new$intubation_date < "2020-04-15" &cohort_new$extubation_date > "2020-03-30",]$intubation_date[1]
+    a_date <- f3_all_15[[i]][f3_all_15[[i]]$pat_id == eb[j],]$date
+    diff_days_blue[j] <- difftime(as.character(a_date),as.character(in_date),units = "days")
+  }
+  days_blue[i] <- mean(diff_days_blue)
+}
+
+
+summary(days_red)
+summary(days_yellow)
+summary(days_blue)
+```
+
+
+
+```{r}
+id_all <- NULL
+for (i in 1: 9547) {
+  id_all <- c(id_all,f3_all_15[[i]]$pat_enc_csn_id)
+}
+df2 <- data.frame(table(id_all))
+writexl::write_xlsx(df2,"f2.xlsx")
+```
+
+```{r}
+f2 <- read_xlsx("f2.xlsx")
+f1 <- read_xlsx("encounter_id.xlsx")
+id_other <- setdiff(f1$unique.encounter_crisis_id.,f2$id_all)
+df1 <- data.frame(id_other,9547)
+colnames(df1) <- c("id_all","Freq")
+df2 <- data.frame(f2$id_all,(9547-f2$Freq))
+colnames(df2) <- c("id_all","Freq")
+all <- rbind(df1,df2)
+writexl::write_xlsx(all,"all.xlsx")
+
+```
+
+
+
+
+
+
+
+
+
+

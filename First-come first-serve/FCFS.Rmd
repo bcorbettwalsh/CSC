@@ -1,0 +1,228 @@
+---
+title: "FCFS"
+author: "Jianan"
+date: "2023-08-02"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyverse)
+load("FCFS.RData")
+```
+
+start_date
+```{r}
+print(start_date)
+```
+
+last_date
+```{r}
+print(last_date)
+```
+
+total number of patients after allocation for each day
+
+```{r}
+names(v) <- d
+v
+```
+
+
+
+for each day of the crisis
+receive_new
+```{r}
+receive_new <- receive_new[receive_new != 0]
+names(receive_new) <- as.Date(c("2020-03-31",paste0("2020-04-",01:14)))
+print(receive_new)
+```
+receive_old
+```{r}
+receive_old <- receive_old[receive_old != 0]
+names(receive_old) <- as.Date(c("2020-03-31",paste0("2020-04-",01:14)))
+print(receive_old)
+```
+give_new
+```{r}
+give <- give[give != 0]
+names(give) <- as.Date(c("2020-03-31",paste0("2020-04-",01:14)))
+print(give)
+```
+
+```{r include = FALSE}
+#race regroup
+cohort_new <- add_column(cohort_new, race_new = NA)
+cohort_new[cohort_new$race %in% c("White","Unknown, White",
+                                  "Other Race, White","White, Other Race",
+                                  "White, Unknown",
+                                  "White, Other Pacific Islander",
+                                  "White;Other Race",
+                                  "White;Other Race",
+                                  "Patient Refused;White",
+                                  "Other Race;White"),]$race_new <- "White"
+cohort_new[cohort_new$race %in% c("African American (Black)",
+                                  "African American (Black), White",
+                                  "African American (Black), Bangladeshi",
+                                  "Chinese;African American (Black)",
+                                  "White;African American (Black)",
+                                  "Bangladeshi;African American (Black)"),]$race_new <- "African American"
+cohort_new[cohort_new$race %in% c("Asian","Chinese","Chinese, Asian - unspecified","Japanese",
+                                  "Pakistani","Bangladeshi","Asian - unspecified, Other Race",
+                                  "Korean, Unknown","Other Pacific Islander","Asian Indian",
+                                  "Asian - unspecified","Unknown, Chinese","Chinese, Other Race",
+                                  "Filipino","Filipino, Other Pacific Islander",
+                                  "Other Race, Chinese",
+                                  "Asian;Asian - unspecified",
+                                  "Korean","Other Race;Chinese",
+                                  "Chinese;Asian - unspecified",
+                                  "Vietnamese","Asian Indian;Other Race",
+                                  "Asian - unspecified;Chinese",
+                                  "Chinese;Asian"),]$race_new <- "Asian"
+cohort_new[cohort_new$race %in% c("Native American (American Indian/Eskimo/Aleutian)",
+                                  "Native American (American Indian/Eskimo/Aleutian) , Other Pacific Islander",
+                                  "White;Native American (American Indian/Eskimo/Aleutian)",
+                                  "Other Pacific Islander;Native American (American Indian/Eskimo/Aleutian)",
+                                  "Native American (American Indian/Eskimo/Aleutian) ;African American (Black)",
+                                  "Other Pacific Islander;White",
+                                  "Filipino;Other Pacific Islander",
+                                  "Native American (American Indian/Eskimo/Aleutian) ;African American (Black)"),]$race_new <- "Native American"
+cohort_new[cohort_new$race %in% c("Unknown","Other Race",NA,"Patient Refused",
+                                  "Unknown, Other Race","Other Race, Unknown","0"),]$race_new <- "Unknown"
+cohort_new[is.na(cohort_new$race_new),]
+#ethnicity regroup
+cohort_new <- add_column(cohort_new, ethnicity_new = NA)
+cohort_new[cohort_new$ethnicity %in% c("Not of Spanish/Hispanic Origin",
+                                       "Not of Spanish/Hispanic Origin, Unknown"),]$ethnicity_new <- "Not Hispanic"
+cohort_new[cohort_new$ethnicity %in% c("Patient Refused","Unknown",
+                                       "Unknown, Not of Spanish/Hispanic Origin",NA),]$ethnicity_new <- "Unknown"
+cohort_new[is.na(cohort_new$ethnicity_new),]$ethnicity_new <- "Hispanic"
+cohort_new[is.na(cohort_new$ethnicity_new),]
+cohort_new[is.na(cohort_new$race_new),]$race
+cohort_new[is.na(cohort_new$ethnicity_new),]$ethnicity
+```
+
+(1) group_give
+
+age
+```{r}
+mean(cohort_new[cohort_new$pat_id %in% group_give$pat_id & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"age")
+sd(cohort_new[cohort_new$pat_id %in% group_give$pat_id & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"age")
+```
+
+gender
+```{r}
+gender_group <- cohort_new[cohort_new$pat_id %in% group_give$pat_id & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$sex
+t2 <- table(gender_group)
+gender_percent_group <- t2/length(gender_group)
+gender_number_group <- t2
+gender_percent_group
+gender_number_group
+```
+
+race
+```{r}
+race_group <- cohort_new[cohort_new$pat_id %in% group_give$pat_id & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$race_new
+t2 <- table(race_group)
+race_percent_group <- t2/length(race_group)
+race_number_group <- t2
+race_percent_group
+race_number_group
+```
+
+ethnicity
+```{r}
+eth_group <- cohort_new[cohort_new$pat_id %in% group_give$pat_id & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$ethnicity_new
+t2 <- table(eth_group)
+eth_percent_group <- t2/length(eth_group)
+eth_number_group <- t2
+eth_percent_group
+eth_number_group
+```
+
+survival rate
+```{r}
+cohort_new[is.na(cohort_new$dead),]$dead <- 0
+cohort_new$dead <- as.character(cohort_new$dead)
+cohort_new[cohort_new$dead == "1",]$dead <- "deceased"
+cohort_new[cohort_new$dead == "0",]$dead <- "alive"
+sur_group <- cohort_new[cohort_new$pat_id %in% group_give$pat_id & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$dead
+t2 <- table(sur_group)
+sur_percent_group <- t2/length(sur_group)
+sur_number_group <- t2
+sur_percent_group
+sur_number_group
+```
+
+(1) group_receive_new
+
+age
+```{r}
+mean(cohort_new[cohort_new$pat_id %in% group_receive_new$pat_id & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"age")
+sd(cohort_new[cohort_new$pat_id %in% group_receive_new$pat_id & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$"age")
+```
+
+gender
+```{r}
+gender_group <- cohort_new[cohort_new$pat_id %in% group_receive_new$pat_id & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$sex
+t2 <- table(gender_group)
+gender_percent_group <- t2/length(gender_group)
+gender_number_group <- t2
+gender_percent_group
+gender_number_group
+```
+
+race
+```{r}
+race_group <- cohort_new[cohort_new$pat_id %in% group_receive_new$pat_id & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$race_new
+t2 <- table(race_group)
+race_percent_group <- t2/length(race_group)
+race_number_group <- t2
+race_percent_group
+race_number_group
+```
+
+ethnicity
+```{r}
+eth_group <- cohort_new[cohort_new$pat_id %in% group_receive_new$pat_id & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$ethnicity_new
+t2 <- table(eth_group)
+eth_percent_group <- t2/length(eth_group)
+eth_number_group <- t2
+eth_percent_group
+eth_number_group
+```
+
+survival rate
+```{r}
+# cohort_new[is.na(cohort_new$dead),]$dead <- 0
+# cohort_new$dead <- as.character(cohort_new$dead)
+# cohort_new[cohort_new$dead == "1",]$dead <- "deceased"
+# cohort_new[cohort_new$dead == "0",]$dead <- "alive"
+sur_group <- cohort_new[cohort_new$pat_id %in% group_receive_new$pat_id & cohort_new$intubation_date < "2020-04-15" & cohort_new$extubation_date > "2020-03-30",]$dead
+t2 <- table(sur_group)
+sur_percent_group <- t2/length(sur_group)
+sur_number_group <- t2
+sur_percent_group
+sur_number_group
+```
+
+time of the first group_give
+```{r}
+dates <- sort(unique(group_give$date))
+time <- NULL
+for(i in 1:length(dates)){
+  df <- group_give[group_give$date == dates[i],]
+  time[[i]] <- sort(df$time)[1]
+}
+time
+
+```
+
+```{r}
+library(writexl)
+id <- data.frame(id=group_give$pat_enc_csn_id)
+write_xlsx(id,"give_FCFS.xlsx")
+
+```
+
